@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "winlauncher-plugin-telegram"
+version = "0.1.0"
+description = "Telegram chats as WinLauncher search results"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {file = "LICENSE"}
+dependencies = [
+    # 1.45 is reported to fail on accounts that joined a Community (DialogCommunity
+    # has no peer); raise the limit once that is fixed upstream.
+    "Telethon>=1.34,<1.45",
+]
+
+# WinLauncher finds plugins through this group; the value names the Plugin subclass.
+[project.entry-points."winlauncher.plugins"]
+telegram = "winlauncher_plugin_telegram.plugin:TelegramPlugin"
+
+[tool.setuptools.packages.find]
+include = ["winlauncher_plugin_telegram*"]
+
+[tool.setuptools.package-data]
+"winlauncher_plugin_telegram" = ["assets/*.svg"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
