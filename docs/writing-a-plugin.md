@@ -134,6 +134,19 @@ with its `api.json`.
 `refresh` is the only place that talks to the network. Cache what is expensive
 (avatars by photo id, for instance) and re-fetch only what changed.
 
+**Know the size you can afford.** Matching runs in Python over your list. A few
+thousand items stay inside a keystroke — 5,000 tickets answer a typical query in
+13 to 45 ms, a number in 2 ms — but tens of thousands do not. List the part of your
+world that is actually searched by name, and offer the rest through a direct
+lookup: recognize an identifier in the typed text and return one item that opens
+it, without asking any server.
+
+You do not choose how your items are matched; WinLauncher matches them like file
+names, which is why a chat ranks against files sensibly and matched letters are
+highlighted. One rule is worth knowing: a term containing a digit is matched in one
+piece, so `12345` finds ticket 12345 and not 52314, while words in the same query
+still match loosely.
+
 **Threads.** `refresh`, `open` and commands run on different worker threads, never
 the GUI thread. A plugin that uses COM calls `pythoncom.CoInitialize()` at the
 start of each of them and `pythoncom.CoUninitialize()` when done.
