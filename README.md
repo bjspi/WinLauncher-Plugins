@@ -16,15 +16,15 @@ their own application.
 [![Ruff](https://img.shields.io/badge/code%20style-Ruff-D7FF64?logo=ruff&logoColor=black)](https://docs.astral.sh/ruff/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-F7DF1E)](LICENSE)
 
-```text
-tg anna
-──────────────────────────────────────────────────────────
- Telegram: Anna Schmidt          @anna
- Telegram: Team Annahme          Group  ·  3 unread
- annual-report.pdf               D:\Documents\2026
-```
-
 </div>
+
+Typing `tg anna` in WinLauncher:
+
+```text
+Telegram: Anna Schmidt        @anna
+Telegram: Team Annahme        Group  ·  3 unread
+annual-report.pdf             D:\Documents\2026
+```
 
 ---
 
