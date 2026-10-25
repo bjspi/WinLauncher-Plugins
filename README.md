@@ -1,44 +1,78 @@
-# WinLauncher plugins
+<div align="center">
 
-Search plugins for [WinLauncher](https://github.com/bjspi/WinLauncher): chats,
-contacts and records of other programs as search results, each opened by a deep
-link into its own application.
+<img src="https://raw.githubusercontent.com/bjspi/WinLauncher/main/docs/images/icon.png" width="96" alt="WinLauncher icon">
 
-| Plugin | What it lists |
+# WinLauncher Plugins
+
+**Your chats, contacts and records — right in the search bar.**
+
+Search plugins for [WinLauncher](https://github.com/bjspi/WinLauncher): items from other
+programs show up next to your files and apps, and open by a deep link straight into
+their own application.
+
+[![WinLauncher 0.12+](https://img.shields.io/badge/WinLauncher-0.12%2B-0078D6?logo=windows&logoColor=white)](https://github.com/bjspi/WinLauncher)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![No pip install](https://img.shields.io/badge/Install-drop%20a%20folder-41CD52)](#-install)
+[![Ruff](https://img.shields.io/badge/code%20style-Ruff-D7FF64?logo=ruff&logoColor=black)](https://docs.astral.sh/ruff/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-F7DF1E)](LICENSE)
+
+```text
+tg anna
+──────────────────────────────────────────────────────────
+ Telegram: Anna Schmidt          @anna
+ Telegram: Team Annahme          Group  ·  3 unread
+ annual-report.pdf               D:\Documents\2026
+```
+
+</div>
+
+---
+
+## 🧩 Plugins
+
+| Plugin | What it lists | Keyword |
+| --- | --- | --- |
+| <img src="plugins/telegram/assets/telegram.svg" width="16"> [**Telegram**](#-telegram) | Your recent Telegram chats, opened in Telegram Desktop | `tg` |
+| 📐 [`_template`](plugins/_template) | Not a plugin: the skeleton to copy for a new one | — |
+
+## ✨ How it feels
+
+| | |
 | --- | --- |
-| [`telegram`](plugins/telegram) | Your recent Telegram chats, opened in Telegram Desktop |
-| [`_template`](plugins/_template) | Not a plugin: the skeleton to copy for a new one |
+| ⌨️ **Keyword on top** | `tg anna` puts matching chats first — your files still follow below, so `tg` never swallows a word. |
+| 🎯 **`@` for one plugin alone** | `@tg anna` answers from Telegram only, without any file results. |
+| 🔍 **Same smart matching** | Prefixes, word starts, initials and fuzzy matches, exactly like file names. Identifiers such as ticket numbers are matched literally. |
+| ⚡ **Never costs a keystroke** | Plugins refresh in the background and are searched locally; their last list is cached across restarts and offline. |
+| 🛡️ **Can't break WinLauncher** | A plugin that fails to import, declares nonsense or throws is listed as a problem — everything else keeps running. |
+| 🔒 **Yours stay private** | Private plugins live in your own folder and take precedence over same-named ones here. |
+
+## 📦 Install
 
 Every plugin is one folder under `plugins/`, holding `plugin.py`, a `plugin.toml`
 with its version and whatever assets it needs. WinLauncher loads such folders
-directly, so nothing here is installed with pip.
+directly — nothing here is installed with pip.
 
-## Use them
-
-Clone this repository and point WinLauncher at its `plugins` folder:
+**All plugins — clone and point WinLauncher at it:**
 
 ```powershell
-git clone https://github.com/bjspi/WinLauncher-Plugins.git D:\Projects\Python\WinLauncher-Plugins
+git clone https://github.com/bjspi/WinLauncher-Plugins.git
 ```
 
-Settings → Plugins → **Plugin folders**: add `D:\Projects\Python\WinLauncher-Plugins\plugins`,
-save and restart WinLauncher from the tray. Each plugin then appears on the
-Plugins page, off until you turn it on.
+Settings → Plugins → **Plugin folders**: add the clone's `plugins` folder, save and
+restart WinLauncher from the tray. Each plugin then appears on the Plugins page,
+off until you turn it on. `git pull` updates them.
 
-To take a single plugin instead, copy its folder into
-`%USERPROFILE%\.WinLauncher\plugins\`, which WinLauncher always searches. The same
-folder is the place for private plugins of your own, which are never pushed here.
+**A single plugin — copy its folder** into `%USERPROFILE%\.WinLauncher\plugins\`,
+which WinLauncher always searches. The same folder is the place for private plugins
+of your own, which are never pushed here.
 
-## Telegram
+## 💬 Telegram
 
-Lists your recent Telegram chats; choosing one opens that chat in Telegram
-Desktop. Type `tg` for the most recent ones, `tg anna` to search them, `@tg anna`
-for chats without any file results, or just a name in an ordinary search.
+Lists your recent Telegram chats; choosing one opens that chat in Telegram Desktop.
+Type `tg` for the most recent ones, `tg anna` to search them, `@tg anna` for chats
+without any file results, or just a name in an ordinary search.
 
-```text
-Telegram: Anna Schmidt        @anna
-Telegram: Team Annahme        Group  ·  3 unread
-```
+### Why it signs in on its own
 
 Telegram Desktop keeps no chat list that another program could read: the `tdata`
 folder is encrypted and holds the account key, not your chats, which the app
@@ -46,6 +80,8 @@ downloads at every start. Reading that key out of `tdata` is what session-steali
 malware does, and Telegram may end such sessions or ban the account. This plugin
 therefore signs in as a session of its own, like a second device, and only reads
 your chat list.
+
+### Setup
 
 1. Install [Telethon](https://pypi.org/project/Telethon/) into the environment
    that runs WinLauncher: `pip install "telethon>=1.34,<1.45"`, or
@@ -59,9 +95,13 @@ your chat list.
 
 Telegram shows the session as *WinLauncher* under Settings → Devices.
 **Sign out** ends it on Telegram's side too, and deletes the local session,
-avatars and list. The session file
-`%USERPROFILE%\.WinLauncher\plugin-data\telegram\telegram.session` grants access
-to your account, like the `tdata` folder; keep it out of shared backups.
+avatars and list.
+
+> [!WARNING]
+> The session file `%USERPROFILE%\.WinLauncher\plugin-data\telegram\telegram.session`
+> grants access to your account, like the `tdata` folder. Keep it out of shared backups.
+
+### What you get
 
 Up to 200 recent chats are listed (Settings: *Chats*), in Telegram's own order.
 Small profile pictures are downloaded once per photo, at most 40 per refresh, and
@@ -80,20 +120,33 @@ whose number is hidden (`tg://user?id=` does not work there), so the plugin leav
 those chats out. A peer kind the installed Telethon does not model is skipped, so
 one unknown chat cannot stop the list.
 
-## Develop
+## 🛠️ Write your own
 
-[docs/writing-a-plugin.md](docs/writing-a-plugin.md) is the guide: the entry
-points, the rules that matter and a checklist. Copy `plugins/_template` to start —
-folders whose name begins with `_` are not loaded. WinLauncher's own
-[docs/plugins.md](https://github.com/bjspi/WinLauncher/blob/main/docs/plugins.md)
-specifies how the host ranks, schedules and opens items.
+```powershell
+Copy-Item -Recurse plugins\_template plugins\myplugin
+```
+
+A plugin needs only an `id`, a `label` and a `refresh` that returns its items —
+WinLauncher does the matching, ranking, caching and scheduling. Folders whose name
+begins with `_` are not loaded.
+
+- 📖 [docs/writing-a-plugin.md](docs/writing-a-plugin.md) — the guide: entry points,
+  the rules that matter and a checklist.
+- 📐 WinLauncher's [docs/plugins.md](https://github.com/bjspi/WinLauncher/blob/main/docs/plugins.md)
+  — how the host ranks, schedules and opens items.
+
+### Checks
 
 ```powershell
 python -m ruff check plugins tests
 python -m ruff format --check plugins tests
-$env:PYTHONPATH = "D:\Projects\Python\WinFinder"; python -m unittest discover -s tests
+$env:PYTHONPATH = "<path to your WinLauncher checkout>"; python -m unittest discover -s tests
 ```
 
 The tests load the plugins the way WinLauncher does and never contact Telegram.
 `PYTHONPATH` only has to name WinLauncher's checkout while it is not installed as
 a package.
+
+## 📄 License
+
+[MIT](LICENSE)
