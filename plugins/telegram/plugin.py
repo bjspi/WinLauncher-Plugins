@@ -20,6 +20,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
+from winlauncher import __version__
 from winlauncher.plugins.api import (
     Plugin,
     PluginCommand,
@@ -29,8 +30,6 @@ from winlauncher.plugins.api import (
     PluginOption,
     SetupRequired,
 )
-
-from winlauncher_plugin_telegram import __version__
 
 SESSION_NAME = "telegram"  # Telethon adds .session; the file grants access to the account.
 CREDENTIALS_FILE = "api.json"

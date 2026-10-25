@@ -1,0 +1,8 @@
+# Not a distribution: the plugins are loaded from their folders, so there is no
+# pyproject.toml. Same style as WinLauncher itself.
+line-length = 100
+target-version = "py311"
+
+[lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
