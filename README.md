@@ -7,6 +7,7 @@ link into its own application.
 | Plugin | What it lists |
 | --- | --- |
 | [`telegram`](plugins/telegram) | Your recent Telegram chats, opened in Telegram Desktop |
+| [`_template`](plugins/_template) | Not a plugin: the skeleton to copy for a new one |
 
 Every plugin is one folder under `plugins/`, holding `plugin.py`, a `plugin.toml`
 with its version and whatever assets it needs. WinLauncher loads such folders
@@ -81,8 +82,11 @@ one unknown chat cannot stop the list.
 
 ## Develop
 
-Writing a plugin is documented in WinLauncher's
-[docs/plugins.md](https://github.com/bjspi/WinLauncher/blob/main/docs/plugins.md).
+[docs/writing-a-plugin.md](docs/writing-a-plugin.md) is the guide: the entry
+points, the rules that matter and a checklist. Copy `plugins/_template` to start —
+folders whose name begins with `_` are not loaded. WinLauncher's own
+[docs/plugins.md](https://github.com/bjspi/WinLauncher/blob/main/docs/plugins.md)
+specifies how the host ranks, schedules and opens items.
 
 ```powershell
 python -m ruff check plugins tests
