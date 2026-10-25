@@ -45,6 +45,7 @@ Everything WinLauncher calls is on your `Plugin` subclass. Only `id`, `label` an
 | `icon` | Image file for items that bring no icon of their own. |
 | `round_icons` | `True` for avatars: images are cropped to circles, and items without one get colored initials. |
 | `options` | `PluginOption` values the user edits in Settings; their type is the type of `default`. |
+| `literal_terms` | Patterns for typed terms that name one of your items, such as `(r"HCP-?\w*",)`. A term one of them describes entirely is matched in one piece instead of loosely. Case is ignored. |
 
 ### What you implement
 
@@ -143,9 +144,16 @@ it, without asking any server.
 
 You do not choose how your items are matched; WinLauncher matches them like file
 names, which is why a chat ranks against files sensibly and matched letters are
-highlighted. One rule is worth knowing: a term containing a digit is matched in one
-piece, so `12345` finds ticket 12345 and not 52314, while words in the same query
-still match loosely.
+highlighted. What you do decide is which typed terms name an item rather than
+describe one. A term containing a digit always counts as a name, so `12345` finds
+ticket 12345 and not 52314. For identifiers without digits, declare their shape:
+
+```python
+literal_terms = (r"HCP-?\w*",)   # HCP and HCP-1234 are names, not words
+```
+
+Only the terms a pattern describes entirely are affected; the words of the same
+query keep matching loosely, so `HCP calibratio` still finds a typo'd title.
 
 **Threads.** `refresh`, `open` and commands run on different worker threads, never
 the GUI thread. A plugin that uses COM calls `pythoncom.CoInitialize()` at the
