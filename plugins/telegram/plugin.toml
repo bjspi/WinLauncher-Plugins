@@ -1,0 +1,3 @@
+# What WinLauncher reads about this plugin without running it. Everything else
+# (id, label, keyword, options) is declared by the Plugin class in plugin.py.
+version = "1.0.0"
