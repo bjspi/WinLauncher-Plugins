@@ -40,7 +40,7 @@ Everything WinLauncher calls is on your `Plugin` subclass. Only `id`, `label` an
 | `id` | Settings key and data folder name; `a-z`, `0-9`, `_`, `-`. Must stay stable: it ties the user's settings and cache to your plugin. |
 | `label` | Shown before each item's name, as in `Telegram: Anna`. |
 | `description` | One or two sentences for the settings card. |
-| `keyword` | Typed first, it searches only your plugin (`tg anna`). The user may change it. |
+| `keyword` | Typed first, it puts your items on top (`tg anna`); the same text still searches files, and `@tg anna` answers from your plugin alone. The user may change it. |
 | `refresh_minutes` | How often `refresh` runs, 1 to 1440. |
 | `icon` | Image file for items that bring no icon of their own. |
 | `round_icons` | `True` for avatars: images are cropped to circles, and items without one get colored initials. |

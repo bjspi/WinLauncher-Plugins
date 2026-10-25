@@ -32,8 +32,8 @@ folder is the place for private plugins of your own, which are never pushed here
 ## Telegram
 
 Lists your recent Telegram chats; choosing one opens that chat in Telegram
-Desktop. Type `tg` for the most recent ones, `tg anna` to search them, or just a
-name in an ordinary search.
+Desktop. Type `tg` for the most recent ones, `tg anna` to search them, `@tg anna`
+for chats without any file results, or just a name in an ordinary search.
 
 ```text
 Telegram: Anna Schmidt        @anna
