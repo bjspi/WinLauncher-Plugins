@@ -12,7 +12,7 @@ their own application.
 
 [![WinLauncher 0.12+](https://img.shields.io/badge/WinLauncher-0.12%2B-0078D6?logo=windows&logoColor=white)](https://github.com/bjspi/WinLauncher)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![No pip install](https://img.shields.io/badge/Install-drop%20a%20folder-41CD52)](#-install)
+[![One-click install](https://img.shields.io/badge/Install-one%20click%20in%20Settings-41CD52)](#-install)
 [![Ruff](https://img.shields.io/badge/code%20style-Ruff-D7FF64?logo=ruff&logoColor=black)](https://docs.astral.sh/ruff/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-F7DF1E)](LICENSE)
 
@@ -42,29 +42,40 @@ annual-report.pdf             D:\Documents\2026
 | ⌨️ **Keyword on top** | `tg anna` puts matching chats first — your files still follow below, so `tg` never swallows a word. |
 | 🎯 **`@` for one plugin alone** | `@tg anna` answers from Telegram only, without any file results. |
 | 🔍 **Same smart matching** | Prefixes, word starts, initials and fuzzy matches, exactly like file names. Identifiers such as ticket numbers are matched literally. |
+| 📦 **One-click install** | Install, update and remove plugins right in WinLauncher's settings; new versions are announced. |
 | ⚡ **Never costs a keystroke** | Plugins refresh in the background and are searched locally; their last list is cached across restarts and offline. |
 | 🛡️ **Can't break WinLauncher** | A plugin that fails to import, declares nonsense or throws is listed as a problem — everything else keeps running. |
 | 🔒 **Yours stay private** | Private plugins live in your own folder and take precedence over same-named ones here. |
 
 ## 📦 Install
 
-Every plugin is one folder under `plugins/`, holding `plugin.py`, a `plugin.toml`
-with its version and whatever assets it needs. WinLauncher loads such folders
-directly — nothing here is installed with pip.
+This repository is WinLauncher's default **plugin catalog**, so there is nothing to
+download by hand:
 
-**All plugins — clone and point WinLauncher at it:**
+1. WinLauncher → **Settings → Plugins → Available plugins**: choose a plugin, **Install**.
+2. Restart WinLauncher from the tray, then turn the plugin on in its settings.
 
-```powershell
-git clone https://github.com/bjspi/WinLauncher-Plugins.git
+WinLauncher checks the catalog every 6 hours and announces new versions of installed
+plugins; **Update** installs them. Catalogs need [git](https://git-scm.com/).
+
+**Working on plugins?** Clone this repository and add its `plugins` folder under
+Settings → Plugins → **Plugin folders** instead; WinLauncher then loads the plugins
+straight from your clone.
+
+## 🏢 Your own catalog
+
+Any git repository becomes a catalog with a `catalog.toml` at its root — handy for a
+team's private plugins on a company git server:
+
+```toml
+name = "Team plugins"
+plugins = "plugins"     # One subfolder per plugin, each with plugin.py and plugin.toml.
 ```
 
-Settings → Plugins → **Plugin folders**: add the clone's `plugins` folder, save and
-restart WinLauncher from the tray. Each plugin then appears on the Plugins page,
-off until you turn it on. `git pull` updates them.
-
-**A single plugin — copy its folder** into `%USERPROFILE%\.WinLauncher\plugins\`,
-which WinLauncher always searches. The same folder is the place for private plugins
-of your own, which are never pushed here.
+Add its address under Settings → Plugins → **Plugin catalogs**. Private repositories
+use your saved git credentials. Each plugin folder names its version, name,
+description and required packages in its `plugin.toml`
+([the manifest](docs/writing-a-plugin.md#the-manifest)).
 
 ## 💬 Telegram
 

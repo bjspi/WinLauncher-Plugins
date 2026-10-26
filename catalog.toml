@@ -1,0 +1,5 @@
+# This repository is a WinLauncher plugin catalog. WinLauncher offers the plugins of
+# the folder below under Settings → Plugins → Available plugins. Each plugin folder
+# names its version, name and description in its own plugin.toml.
+name = "WinLauncher Plugins"
+plugins = "plugins"
