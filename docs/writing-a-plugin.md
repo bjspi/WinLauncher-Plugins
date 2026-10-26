@@ -20,7 +20,7 @@ A plugin is a folder, and nothing else is registered anywhere:
 
 ```text
 plugins\myplugin\
-    plugin.toml      version, name, description, requires ← read without running your code
+    plugin.toml      version, name, description, icon, requires ← read without running your code
     plugin.py        your Plugin subclass
     assets\          icons and other files that belong to the plugin
 ```
@@ -37,6 +37,7 @@ shows the installed version, and Available plugins lists your plugin with it.
 version = "1.0.0"
 name = "Telegram"                        # Shown before loading; your label afterwards.
 description = "Your recent Telegram chats; choosing one opens it in Telegram Desktop."
+icon = "assets/telegram.svg"             # Shown under Available plugins, inside the folder.
 requires = ["telethon>=1.34,<1.45"]      # Packages beside WinLauncher, as pip requirements.
 ```
 

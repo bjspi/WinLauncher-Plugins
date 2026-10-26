@@ -25,6 +25,7 @@ class CatalogTest(unittest.TestCase):
             with self.subTest(plugin=plugin.folder.name):
                 manifest = plugin.manifest
                 self.assertTrue(manifest.version and manifest.name and manifest.description)
+                self.assertIsNotNone(plugin.icon, "plugin.toml names no icon file it has")
 
 
 if __name__ == "__main__":

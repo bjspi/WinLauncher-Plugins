@@ -1,8 +1,9 @@
-# What WinLauncher reads about this plugin without running it: in a catalog, and to
-# show the installed version. Everything else (id, label, keyword, options) is
+# What WinLauncher reads about this plugin without running it: in Available plugins,
+# and to show the installed version. Everything else (id, label, keyword, options) is
 # declared by the Plugin class in plugin.py.
 version = "1.0.0"
 name = "Telegram"
 description = "Your recent Telegram chats; choosing one opens it in Telegram Desktop. Signs in as a session of its own with your api_id from my.telegram.org."
-# Python packages WinLauncher's environment needs; Settings shows the install command.
+icon = "assets/telegram.svg"  # Shown in Settings, also before the plugin is installed.
+# Python packages WinLauncher's environment needs; installed along with the plugin.
 requires = ["telethon>=1.34,<1.45"]
