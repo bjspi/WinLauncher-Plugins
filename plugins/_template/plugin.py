@@ -15,16 +15,21 @@ from winlauncher.plugins.api import (
     PluginError,
     PluginItem,
     PluginOption,
+    PluginRoute,
 )
 
 MAX_ITEMS = 200
+DRAFTS_ROUTE = "drafts"
+DRAFT_PREFIX = "draft"  # Notes whose file name starts with it are drafts.
 
 
 class TemplatePlugin(Plugin):
     id = "template"  # Keep this stable: the user's settings and cache hang on it.
     label = "Note"  # Rows read "Note: <name>".
     description = "What this plugin lists, in one or two sentences."
-    keyword = "n"  # "n shopping" searches only this plugin.
+    keywords = ("n", "note")  # "n shopping" puts this plugin first; synonyms work alike.
+    # A second way in: "draft shopping" searches only the items routed to it.
+    routes = (PluginRoute(DRAFTS_ROUTE, "Drafts only", ("draft",)),)
     refresh_minutes = 15
     icon = str(Path(__file__).with_name("assets") / "icon.svg")
     round_icons = False  # True for people: round avatars and colored initials.
@@ -56,6 +61,7 @@ class TemplatePlugin(Plugin):
                     name=file.stem,
                     target=str(file),  # Opened with os.startfile by default.
                     subtitle=str(file.parent),
+                    routes=(DRAFTS_ROUTE,) if file.stem.lower().startswith(DRAFT_PREFIX) else (),
                 )
             )
         return items

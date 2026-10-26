@@ -41,40 +41,44 @@ annual-report.pdf             D:\Documents\2026
 | --- | --- |
 | ⌨️ **Keyword on top** | `tg anna` puts matching chats first — your files still follow below, so `tg` never swallows a word. |
 | 🎯 **`@` for one plugin alone** | `@tg anna` answers from Telegram only, without any file results. |
+| 🔀 **Synonyms and routes** | A plugin may answer to several keywords, and offer extra keywords that search only part of its items. |
 | 🔍 **Same smart matching** | Prefixes, word starts, initials and fuzzy matches, exactly like file names. Identifiers such as ticket numbers are matched literally. |
-| 📦 **One-click install** | Install, update and remove plugins right in WinLauncher's settings; new versions are announced. |
+| 📦 **One-click install** | Install, update and uninstall plugins right in WinLauncher's settings, packages included; new versions are announced. |
 | ⚡ **Never costs a keystroke** | Plugins refresh in the background and are searched locally; their last list is cached across restarts and offline. |
 | 🛡️ **Can't break WinLauncher** | A plugin that fails to import, declares nonsense or throws is listed as a problem — everything else keeps running. |
 | 🔒 **Yours stay private** | Private plugins live in your own folder and take precedence over same-named ones here. |
 
 ## 📦 Install
 
-This repository is WinLauncher's default **plugin catalog**, so there is nothing to
+This repository is WinLauncher's default **plugin source**, so there is nothing to
 download by hand:
 
 1. WinLauncher → **Settings → Plugins → Available plugins**: choose a plugin, **Install**.
-2. Restart WinLauncher from the tray, then turn the plugin on in its settings.
+   Its Python packages are installed along with it.
+2. Restart when WinLauncher offers it — the plugin is on.
 
-WinLauncher checks the catalog every 6 hours and announces new versions of installed
-plugins; **Update** installs them. Catalogs need [git](https://git-scm.com/).
+WinLauncher checks this repository every 6 hours and announces new versions of
+installed plugins; **Update** installs them. Repositories need
+[git](https://git-scm.com/).
 
-**Working on plugins?** Clone this repository and add its `plugins` folder under
-Settings → Plugins → **Plugin folders** instead; WinLauncher then loads the plugins
-straight from your clone.
+**Working on plugins?** Clone this repository and add the clone's folder under
+**Plugin sources**. Its plugins then offer **Activate** instead of Install and load
+straight from your clone, so your edits apply at the next start.
 
-## 🏢 Your own catalog
+## 🏢 Your own source
 
-Any git repository becomes a catalog with a `catalog.toml` at its root — handy for a
-team's private plugins on a company git server:
+Any git repository or folder can be a plugin source — handy for a team's private
+plugins on a company git server. Add its address or path under Settings → Plugins →
+**Plugin sources**. A `catalog.toml` at its root names it and its plugins folder:
 
 ```toml
 name = "Team plugins"
 plugins = "plugins"     # One subfolder per plugin, each with plugin.py and plugin.toml.
 ```
 
-Add its address under Settings → Plugins → **Plugin catalogs**. Private repositories
-use your saved git credentials. Each plugin folder names its version, name,
-description and required packages in its `plugin.toml`
+Without one, a folder of plugin folders or a single plugin folder works too.
+Private repositories use your saved git credentials. Each plugin names its version,
+name, description and required packages in its `plugin.toml`
 ([the manifest](docs/writing-a-plugin.md#the-manifest)).
 
 ## 💬 Telegram
