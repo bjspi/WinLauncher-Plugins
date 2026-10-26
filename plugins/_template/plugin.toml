@@ -1,1 +1,8 @@
+# What WinLauncher reads about this plugin without running it: in a catalog, and to
+# show the installed version. Raise the version with every change you publish, so
+# installed copies are offered the update.
 version = "1.0.0"
+name = "Note"
+description = "What this plugin lists, in one or two sentences."
+# Python packages beside WinLauncher that plugin.py imports, as pip requirements.
+requires = []

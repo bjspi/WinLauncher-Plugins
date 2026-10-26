@@ -20,13 +20,39 @@ A plugin is a folder, and nothing else is registered anywhere:
 
 ```text
 plugins\myplugin\
-    plugin.toml      version = "1.0.0"   ← read without running your code
+    plugin.toml      version, name, description, requires ← read without running your code
     plugin.py        your Plugin subclass
     assets\          icons and other files that belong to the plugin
 ```
 
 WinLauncher imports `plugin.py` once at start and takes every `Plugin` subclass
 the file defines itself. Restart WinLauncher from the tray to load a change.
+
+### The manifest
+
+`plugin.toml` is what WinLauncher knows before it runs any of your code: Settings
+shows the installed version, and the catalog lists your plugin with it.
+
+```toml
+version = "1.0.0"
+name = "Telegram"                        # The catalog's entry; your label once loaded.
+description = "Your recent Telegram chats; choosing one opens it in Telegram Desktop."
+requires = ["telethon>=1.34,<1.45"]      # Packages beside WinLauncher, as pip requirements.
+```
+
+Every field is optional, but a plugin without a `version` is never offered an
+update. WinLauncher does not install `requires` itself; it shows the user the
+`pipx inject` or `pip install` command for their installation.
+
+### Publishing
+
+This repository is a **plugin catalog**: `catalog.toml` at its root names it and
+its `plugins` folder, and WinLauncher offers every folder in there (except those
+starting with `_`) under Settings → Plugins → Available plugins. Pushing a plugin
+with a raised `version` is the release: installed copies are offered the update
+within 6 hours. A company or team catalog works the same way — a repository of its
+own with a `catalog.toml`, added under **Plugin catalogs** in WinLauncher's
+settings.
 
 ## The entry points
 
@@ -161,7 +187,8 @@ start of each of them and `pythoncom.CoUninitialize()` when done.
 
 ## Checklist before committing a plugin
 
-- [ ] `plugin.toml` names a new `version`.
+- [ ] `plugin.toml` names a new `version`, and its `name`, `description` and
+      `requires` still fit.
 - [ ] `id` unchanged, `label` set, `description` one or two sentences.
 - [ ] Every network call and subprocess has a timeout; `context.cancel` is honored.
 - [ ] Failures raise `PluginError`/`SetupRequired` with a message a user understands.
