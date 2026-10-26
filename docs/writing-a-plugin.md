@@ -31,28 +31,31 @@ the file defines itself. Restart WinLauncher from the tray to load a change.
 ### The manifest
 
 `plugin.toml` is what WinLauncher knows before it runs any of your code: Settings
-shows the installed version, and the catalog lists your plugin with it.
+shows the installed version, and Available plugins lists your plugin with it.
 
 ```toml
 version = "1.0.0"
-name = "Telegram"                        # The catalog's entry; your label once loaded.
+name = "Telegram"                        # Shown before loading; your label afterwards.
 description = "Your recent Telegram chats; choosing one opens it in Telegram Desktop."
 requires = ["telethon>=1.34,<1.45"]      # Packages beside WinLauncher, as pip requirements.
 ```
 
 Every field is optional, but a plugin without a `version` is never offered an
-update. WinLauncher does not install `requires` itself; it shows the user the
-`pipx inject` or `pip install` command for their installation.
+update. WinLauncher installs `requires` with `pipx inject` or `pip install`,
+whichever fits its installation, before it installs or activates the plugin.
 
-### Publishing
+### Trying it and publishing
 
-This repository is a **plugin catalog**: `catalog.toml` at its root names it and
-its `plugins` folder, and WinLauncher offers every folder in there (except those
+Add the folder of your clone under WinLauncher's **Plugin sources**, then
+**Activate** your plugin: it loads from where it lies, so a restart picks up every
+edit. `requires` is installed on activation, just as on install.
+
+This repository is a **plugin source**: `catalog.toml` at its root names it and its
+`plugins` folder, and WinLauncher offers every folder in there (except those
 starting with `_`) under Settings → Plugins → Available plugins. Pushing a plugin
 with a raised `version` is the release: installed copies are offered the update
-within 6 hours. A company or team catalog works the same way — a repository of its
-own with a `catalog.toml`, added under **Plugin catalogs** in WinLauncher's
-settings.
+within 6 hours. A company or team source works the same way — a repository of its
+own, added under **Plugin sources**.
 
 ## The entry points
 
@@ -66,7 +69,8 @@ Everything WinLauncher calls is on your `Plugin` subclass. Only `id`, `label` an
 | `id` | Settings key and data folder name; `a-z`, `0-9`, `_`, `-`. Must stay stable: it ties the user's settings and cache to your plugin. |
 | `label` | Shown before each item's name, as in `Telegram: Anna`. |
 | `description` | One or two sentences for the settings card. |
-| `keyword` | Typed first, it puts your items on top (`tg anna`); the same text still searches files, and `@tg anna` answers from your plugin alone. The user may change it. |
+| `keywords` | Typed first, one puts your items on top (`tg anna`); the same text still searches files, and `@tg anna` answers from your plugin alone. Several work alike, as synonyms: `("jira", "ji")`. The user may change them. A single `keyword = "tg"`, as older plugins declare it, works too. |
+| `routes` | `PluginRoute(id, label, keywords, description)` values: keywords that search only the items naming the route in their `routes`. See [Keywords and routes](#keywords-and-routes). |
 | `refresh_minutes` | How often `refresh` runs, 1 to 1440. |
 | `icon` | Image file for items that bring no icon of their own. |
 | `round_icons` | `True` for avatars: images are cropped to circles, and items without one get colored initials. |
@@ -103,7 +107,7 @@ Buttons for your settings card, such as *Sign in…*. `PluginCommand(label, run)
 
 ### What an item carries
 
-`PluginItem(key, name, target, subtitle, keywords, icon, title, data)`
+`PluginItem(key, name, target, subtitle, keywords, icon, title, routes, data)`
 
 - `key` identifies the item across refreshes; keep it stable.
 - `name` is what the typed words are matched against.
@@ -111,7 +115,33 @@ Buttons for your settings card, such as *Sign in…*. `PluginCommand(label, run)
   below a name match.
 - `subtitle` is the muted text beside the name, `title` replaces the whole
   `Label: name` text, `icon` is an image file such as a cached avatar.
+- `routes` are the ids of your routes that list the item.
 - `data` holds JSON values your `open` needs; it is cached and never matched.
+
+### Keywords and routes
+
+A route is a second way into your plugin that searches only part of its items. A
+ticket plugin may list every ticket and offer bugs on their own:
+
+```python
+class Tickets(Plugin):
+    id = "tickets"
+    label = "Ticket"
+    keywords = ("jira", "ji")
+    routes = (PluginRoute("bugs", "Bugs only", ("bug",), "Typed first, it searches bugs."),)
+
+    def refresh(self, context):
+        return [
+            PluginItem("T-1", "Login fails after update", routes=("bugs",)),
+            PluginItem("T-3", "Login with single sign-on"),
+        ]
+```
+
+`jira login` finds both, `bug login` only the bug, and `@bug login` only the bug
+without file results. The route filters the items your `refresh` listed, so it
+needs no refresh of its own. Keep a route's `id` stable: the user's keywords for it
+are stored under it. Keywords are letters, digits, `_` and `-`, and must not clash
+with another plugin's or a website's; the user may rename them.
 
 ### What the context gives you
 
@@ -185,11 +215,15 @@ query keep matching loosely, so `HCP calibratio` still finds a typo'd title.
 the GUI thread. A plugin that uses COM calls `pythoncom.CoInitialize()` at the
 start of each of them and `pythoncom.CoUninitialize()` when done.
 
+**Encodings.** Save `plugin.py` and `plugin.toml` as UTF-8. WinLauncher also
+reads files an older Windows editor saved as Windows-1252, and honors a
+`# coding:` declaration, so an umlaut never stops a plugin from loading.
+
 ## Checklist before committing a plugin
 
 - [ ] `plugin.toml` names a new `version`, and its `name`, `description` and
       `requires` still fit.
-- [ ] `id` unchanged, `label` set, `description` one or two sentences.
+- [ ] `id` and route ids unchanged, `label` set, `description` one or two sentences.
 - [ ] Every network call and subprocess has a timeout; `context.cancel` is honored.
 - [ ] Failures raise `PluginError`/`SetupRequired` with a message a user understands.
 - [ ] Nothing is written outside `context.data_dir`; no secret in `options`.
