@@ -9,7 +9,11 @@ from pathlib import Path
 from .domain import SessionError
 
 EXCLUSIONS_FILE = "excluded-sessions.json"
-CHOICE_LIMIT = 20
+# The host's question dialog has a fixed width, wraps its text and cannot scroll: a list
+# longer than this, or lines that wrap, could push its buttons off the screen.
+CHOICE_LIMIT = 8
+CHOICE_LINE_START = 30
+CHOICE_LINE_END = 18  # Keeps the project at the end of a session's description in view.
 
 Ask = Callable[[str, str], str | None]
 
@@ -51,7 +55,7 @@ def choose_session(ask: Ask, choices: Mapping[str, str], title: str) -> str | No
         raise SessionError("No matching session found.")
     if len(matches) > CHOICE_LIMIT:
         raise SessionError("Too many matching sessions. Search with a more specific title or ID.")
-    lines = [f"{index}. {choices[key]} [{key}]" for index, key in enumerate(matches, start=1)]
+    lines = [f"{index}. {_shortened(choices[key])}" for index, key in enumerate(matches, start=1)]
     answer = ask(title, "\n".join(lines) + "\n\nEnter the number of the session:")
     if not answer:
         return None
@@ -65,6 +69,13 @@ def _matching_keys(choices: Mapping[str, str], query: str) -> list[str]:
         for key, label in choices.items()
         if all(term in f"{key} {label}".casefold() for term in terms)
     ]
+
+
+def _shortened(label: str) -> str:
+    """Fit one dialog line, keeping both the title's start and the project's end."""
+    if len(label) <= CHOICE_LINE_START + CHOICE_LINE_END:
+        return label
+    return f"{label[:CHOICE_LINE_START]}…{label[-CHOICE_LINE_END:]}"
 
 
 def _chosen_index(answer: str, count: int) -> int:

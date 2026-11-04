@@ -98,7 +98,7 @@ class DiscoveryTest(SessionTestCase):
 
     def test_routes_icons_manifest_and_host_search(self) -> None:
         self.assertEqual(FOUND.problems, [])
-        self.assertEqual(FOUND.sources[PLUGIN.id].version, "1.0.1")
+        self.assertEqual(FOUND.sources[PLUGIN.id].version, "1.0.2")
         self.assertEqual({route.id for route in PLUGIN.routes}, {p.value for p in domain.Provider})
         icons = {
             application.session_item(
@@ -444,6 +444,49 @@ class ExclusionTest(SessionTestCase):
             with self.assertRaisesRegex(PluginError, "excluded"):
                 PLUGIN.open(PluginItem(key, "Hidden"), self.context)
         resume.assert_not_called()
+
+    def test_name_patterns_hide_matching_sessions_ignoring_case(self) -> None:
+        self.claude_transcript()  # Named "My launcher session".
+        for patterns, visible in [
+            ("", 1),
+            ("  \n\n", 1),
+            ("*LAUNCHER*", 0),
+            ("my launcher session", 0),
+            ("My l?uncher*", 0),
+            ("launcher", 1),  # A whole name, not a substring.
+            ("other\n*launcher*\n", 0),
+            ("[broken", 1),  # An unclosed bracket is ordinary text, no error.
+        ]:
+            with self.subTest(patterns=patterns):
+                options = {**self.context.options, "excluded_names": patterns}
+                items = list(PLUGIN.refresh(PluginContext(self.root, options)))
+                self.assertEqual(len(items), visible)
+
+    def test_exclude_command_does_not_offer_sessions_a_pattern_already_hides(self) -> None:
+        self.claude_transcript()
+        options = {**self.context.options, "excluded_names": "*launcher*"}
+        context = PluginContext(self.root, options)
+        self.assertIn("no sessions", application.exclude_session(context))
+
+    def test_choice_list_stays_short_enough_for_the_host_dialog(self) -> None:
+        long_label = "Claude Code: " + "t" * 150 + " · D:\\Projects\\Python\\MyProject"
+        choices = {f"claude:{number}": long_label for number in range(exclusions.CHOICE_LIMIT)}
+        questions: list[str] = []
+
+        def ask(title: str, text: str) -> str:
+            questions.append(text)
+            return "1" if len(questions) > 1 else "claude"
+
+        self.assertEqual(exclusions.choose_session(ask, choices, "Exclude"), "claude:0")
+        lines = questions[1].splitlines()[: exclusions.CHOICE_LIMIT]
+        limit = exclusions.CHOICE_LINE_START + exclusions.CHOICE_LINE_END + len("1. …")
+        self.assertTrue(all(len(line) <= limit for line in lines))
+        self.assertTrue(lines[0].startswith("1. Claude Code: "))
+        self.assertTrue(lines[0].endswith("Python\\MyProject"))
+
+        choices["claude:one-more"] = long_label
+        with self.assertRaisesRegex(domain.SessionError, "Too many"):
+            exclusions.choose_session(lambda title, text: "claude", choices, "Exclude")
 
     def test_exclusions_apply_before_the_visible_limit(self) -> None:
         self.claude_transcript()

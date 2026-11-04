@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
+from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import TypeGuard
 from uuid import UUID
@@ -110,6 +111,26 @@ class Session:
 
 
 @dataclass(frozen=True, slots=True)
+class ExclusionRules:
+    """Which sessions stay hidden: individually chosen ones and names matching a pattern."""
+
+    keys: Collection[str] = ()
+    name_patterns: tuple[str, ...] = ()  # Casefolded, as `parse_name_patterns` returns them.
+
+    def hides(self, session: Session) -> bool:
+        if session.key in self.keys:
+            return True
+        name = session.display_title.casefold()
+        return any(fnmatchcase(name, pattern) for pattern in self.name_patterns)
+
+
+def parse_name_patterns(lines: str) -> tuple[str, ...]:
+    """One fnmatch pattern per line, ignoring case; blank lines mean nothing."""
+    stripped = (line.strip() for line in lines.splitlines())
+    return tuple(line.casefold() for line in stripped if line)
+
+
+@dataclass(frozen=True, slots=True)
 class SessionSource:
     """One enabled provider and its actual configuration directory."""
 
@@ -133,7 +154,7 @@ def compact_title(value: str) -> str:
 
 def visible_sessions(
     newest_first: Iterable[Session],
-    excluded: Mapping[str, str],
+    rules: ExclusionRules,
     max_age_days: int,
     limit: int,
     now: float,
@@ -143,6 +164,6 @@ def visible_sessions(
     visible = [
         session
         for session in newest_first
-        if session.key not in excluded and session.updated >= cutoff
+        if session.updated >= cutoff and not rules.hides(session)
     ]
     return visible[:limit]

@@ -52,6 +52,7 @@ Settings → Plugins → AI Sessions offers:
 | --- | --- | --- |
 | Last active within (days) | **14** | A rolling age window; `7` means the last week, `0` includes all ages |
 | Sessions | **300** | Maximum visible sessions across the three providers, up to 2,000 |
+| Excluded session names | Empty | One `fnmatch` pattern per line, ignoring case |
 | Codex / Claude Code / Copilot CLI | On | Enable or disable each provider |
 | Provider folders | Empty | Override the local configuration directory |
 
@@ -62,8 +63,14 @@ or assistant message timestamp. Older records without usable timestamps fall
 back to the transcript's modification time. Editing title metadata alone does
 not refresh a Claude or Copilot conversation's message timestamp.
 
+**Excluded session names** hides every session whose shown title matches a pattern
+as a whole: `*probe*` anywhere in the title, `Resume ?revious task` with one wildcard
+character, `[abc]*` for a set of first letters. Removing the line shows those sessions
+again; **Restore session…** does not list them.
+
 **Exclude session…** searches by title, project, provider or ID and then asks for
-the number of the exact session to hide. **Restore session…** brings one back.
+the number of the exact session to hide, among at most eight matches.
+**Restore session…** brings one back.
 These buttons use the settings commands already supported by WinLauncher; the
 current plugin API has no custom per-result context-menu actions.
 

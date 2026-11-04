@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from datetime import date, datetime
 from pathlib import Path
@@ -20,13 +20,23 @@ from winlauncher.plugins.api import (
 )
 
 from .catalog import collect_sessions, session_home
-from .domain import Provider, ResumeTarget, Session, SessionError, SessionSource, visible_sessions
+from .domain import (
+    ExclusionRules,
+    Provider,
+    ResumeTarget,
+    Session,
+    SessionError,
+    SessionSource,
+    parse_name_patterns,
+    visible_sessions,
+)
 from .exclusions import choose_session, read_exclusions, write_exclusions
 from .terminal import resume_session
 
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
 LIMIT_OPTION = "limit"
 MAX_AGE_OPTION = "max_age_days"
+EXCLUDED_NAMES_OPTION = "excluded_names"
 DEFAULT_LIMIT = 300
 MAX_LIMIT = 2000
 DEFAULT_MAX_AGE_DAYS = 14
@@ -64,6 +74,13 @@ class AISessionsPlugin(Plugin):
             "Only sessions active within this many days. Zero shows all ages.",
             (0, LONGEST_MAX_AGE_DAYS),
         ),
+        PluginOption(
+            EXCLUDED_NAMES_OPTION,
+            "Excluded session names",
+            "",
+            "One per line, ignoring case. * and ? are wildcards, as in *probe*.",
+            multiline=True,
+        ),
         *(PluginOption(p.value, p.label, True) for p in Provider),
         *(
             PluginOption(
@@ -78,13 +95,13 @@ class AISessionsPlugin(Plugin):
 
     def refresh(self, context: PluginContext) -> Iterable[PluginItem]:
         with _user_facing_errors():
-            excluded = read_exclusions(context.data_dir)
+            rules = _exclusion_rules(read_exclusions(context.data_dir), context)
             found = current_sessions(context)
             if context.cancel.is_set():
                 return []
             visible = visible_sessions(
                 found,
-                excluded,
+                rules,
                 int(context.options[MAX_AGE_OPTION]),
                 int(context.options[LIMIT_OPTION]),
                 time.time(),
@@ -113,6 +130,11 @@ def _user_facing_errors() -> Iterator[None]:
         yield
     except SessionError as exc:
         raise PluginError(str(exc)) from exc
+
+
+def _exclusion_rules(excluded: Mapping[str, str], context: PluginContext) -> ExclusionRules:
+    patterns = parse_name_patterns(str(context.options[EXCLUDED_NAMES_OPTION]))
+    return ExclusionRules(excluded.keys(), patterns)
 
 
 def current_sessions(context: PluginContext) -> list[Session]:
@@ -165,10 +187,11 @@ def exclude_session(context: PluginContext) -> str | None:
     """Hide one explicitly chosen session while retaining its conversation files."""
     with _user_facing_errors():
         excluded = read_exclusions(context.data_dir)
+        rules = _exclusion_rules(excluded, context)
         choices = {
             session.key: session.description
             for session in current_sessions(context)
-            if session.key not in excluded
+            if not rules.hides(session)
         }
         if not choices:
             return "There are no sessions available to exclude."
