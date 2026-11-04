@@ -11,6 +11,10 @@ from pathlib import Path
 
 SAMPLE_BYTES = 128 * 1024
 SQLITE_TIMEOUT_SECONDS = 1
+LONG_PATH_PREFIX = "\\\\?\\"
+LONG_UNC_PREFIX = LONG_PATH_PREFIX + "UNC\\"
+UNC_PREFIX = "\\\\"
+TEXT_BLOCK_TYPES = ("text", "input_text")
 
 
 def text(value: object) -> str:
@@ -29,30 +33,50 @@ def timestamp(value: object) -> float:
     return 0.0
 
 
+def plain_path(value: str) -> str:
+    r"""Drop the `\\?\` long-path prefix, which folder checks accept but new processes don't.
+
+    A process started in `\\?\D:\Project` silently runs in the Windows folder instead.
+    """
+    if value.startswith(LONG_UNC_PREFIX):
+        return UNC_PREFIX + value.removeprefix(LONG_UNC_PREFIX)
+    return value.removeprefix(LONG_PATH_PREFIX)
+
+
+def modified_time(path: Path) -> float:
+    """The activity fallback; a transcript deleted meanwhile just sorts last."""
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
+
+
 def sampled_records(path: Path) -> Iterator[dict[str, object]]:
     """Read complete records at both ends, never an entire large transcript."""
-    try:
-        with path.open("rb") as stream:
-            size = os.fstat(stream.fileno()).st_size
-            head = stream.read(SAMPLE_BYTES)
-            if size > SAMPLE_BYTES:
-                head = head.rsplit(b"\n", 1)[0]
-            chunks = [head]
-            if size > SAMPLE_BYTES:
-                offset = max(SAMPLE_BYTES, size - SAMPLE_BYTES)
-                stream.seek(offset - 1)
-                tail = stream.read(SAMPLE_BYTES + 1)
-                chunks.append(tail.split(b"\n", 1)[-1])
-    except OSError:
-        return
-    for chunk in chunks:
+    for chunk in _samples(path):
         for line in chunk.splitlines():
             try:
                 record = json.loads(line)
-            except (ValueError, UnicodeError):
+            except ValueError:
                 continue
             if isinstance(record, dict):
                 yield record
+
+
+def _samples(path: Path) -> tuple[bytes, ...]:
+    """The whole of a small file; of a large one, the complete lines at either end."""
+    try:
+        with path.open("rb") as stream:
+            size = os.fstat(stream.fileno()).st_size
+            if size <= SAMPLE_BYTES:
+                return (stream.read(SAMPLE_BYTES),)
+            head = stream.read(SAMPLE_BYTES).rpartition(b"\n")[0]
+            # One byte earlier: if that byte ends a line, the tail starts with a whole record.
+            stream.seek(max(SAMPLE_BYTES, size - SAMPLE_BYTES) - 1)
+            tail = stream.read(SAMPLE_BYTES + 1).partition(b"\n")[2]
+            return (head, tail)
+    except OSError:
+        return ()
 
 
 def message_text(content: object) -> str:
@@ -63,7 +87,7 @@ def message_text(content: object) -> str:
         return " ".join(
             text(block.get("text"))
             for block in content
-            if isinstance(block, dict) and block.get("type") in ("text", "input_text")
+            if isinstance(block, dict) and block.get("type") in TEXT_BLOCK_TYPES
         )
     return ""
 

@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from .domain import SessionError
 
 EXCLUSIONS_FILE = "excluded-sessions.json"
 CHOICE_LIMIT = 20
+
+Ask = Callable[[str, str], str | None]
 
 
 def read_exclusions(folder: Path) -> dict[str, str]:
@@ -28,7 +30,7 @@ def read_exclusions(folder: Path) -> dict[str, str]:
     return saved
 
 
-def write_exclusions(folder: Path, excluded: dict[str, str]) -> None:
+def write_exclusions(folder: Path, excluded: Mapping[str, str]) -> None:
     """Replace atomically so an interrupted write cannot truncate the filter."""
     path = folder / EXCLUSIONS_FILE
     temporary = path.with_suffix(".tmp")
@@ -39,19 +41,12 @@ def write_exclusions(folder: Path, excluded: dict[str, str]) -> None:
         raise SessionError(f"Could not save excluded sessions: {exc}") from exc
 
 
-def choose_session(
-    ask: Callable[[str, str], str | None], choices: dict[str, str], title: str
-) -> str | None:
+def choose_session(ask: Ask, choices: Mapping[str, str], title: str) -> str | None:
     """Search first, then explicitly select one session; never hide a fuzzy match."""
     query = ask(title, "Search by session title, project, provider or session ID:")
     if not query or not query.strip():
         return None
-    terms = query.casefold().split()
-    matches = [
-        key
-        for key, label in choices.items()
-        if all(term in f"{key} {label}".casefold() for term in terms)
-    ]
+    matches = _matching_keys(choices, query)
     if not matches:
         raise SessionError("No matching session found.")
     if len(matches) > CHOICE_LIMIT:
@@ -60,10 +55,24 @@ def choose_session(
     answer = ask(title, "\n".join(lines) + "\n\nEnter the number of the session:")
     if not answer:
         return None
+    return matches[_chosen_index(answer, len(matches))]
+
+
+def _matching_keys(choices: Mapping[str, str], query: str) -> list[str]:
+    terms = query.casefold().split()
+    return [
+        key
+        for key, label in choices.items()
+        if all(term in f"{key} {label}".casefold() for term in terms)
+    ]
+
+
+def _chosen_index(answer: str, count: int) -> int:
+    """Translate the one-based number the user saw into a list index."""
     try:
         number = int(answer.strip())
-    except ValueError as exc:
-        raise SessionError("Enter one of the session numbers shown.") from exc
-    if not 1 <= number <= len(matches):
+    except ValueError:
+        number = 0
+    if not 1 <= number <= count:
         raise SessionError("Enter one of the session numbers shown.")
-    return matches[number - 1]
+    return number - 1

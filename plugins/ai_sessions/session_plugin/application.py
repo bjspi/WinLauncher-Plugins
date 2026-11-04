@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
+from datetime import date, datetime
 from pathlib import Path
 
 from winlauncher.plugins.api import (
+    Chip,
     Plugin,
     PluginCommand,
     PluginContext,
@@ -17,14 +20,24 @@ from winlauncher.plugins.api import (
 )
 
 from .catalog import collect_sessions, session_home
-from .domain import Provider, Session, SessionError, SessionSource, visible_sessions
+from .domain import Provider, ResumeTarget, Session, SessionError, SessionSource, visible_sessions
 from .exclusions import choose_session, read_exclusions, write_exclusions
 from .terminal import resume_session
 
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
+LIMIT_OPTION = "limit"
+MAX_AGE_OPTION = "max_age_days"
 DEFAULT_LIMIT = 300
+MAX_LIMIT = 2000
 DEFAULT_MAX_AGE_DAYS = 14
-MAX_SESSIONS = 2000
+LONGEST_MAX_AGE_DAYS = 3650
+ACTIVITY_DATE_FORMAT = "%Y-%m-%d"
+ACTIVITY_TIME_FORMAT = "%H:%M"
+NAMED_DAYS_AGO = {0: "Today", 1: "Yesterday"}
+
+
+def _home_option(provider: Provider) -> str:
+    return f"{provider.value}_home"
 
 
 class AISessionsPlugin(Plugin):
@@ -42,27 +55,29 @@ class AISessionsPlugin(Plugin):
     icon = str(ASSETS / "sessions.svg")
     options = (
         PluginOption(
-            "limit", "Sessions", DEFAULT_LIMIT, "Maximum visible sessions.", (1, MAX_SESSIONS)
+            LIMIT_OPTION, "Sessions", DEFAULT_LIMIT, "Maximum visible sessions.", (1, MAX_LIMIT)
         ),
         PluginOption(
-            "max_age_days",
+            MAX_AGE_OPTION,
             "Last active within (days)",
             DEFAULT_MAX_AGE_DAYS,
             "Only sessions active within this many days. Zero shows all ages.",
-            (0, 3650),
+            (0, LONGEST_MAX_AGE_DAYS),
         ),
-        PluginOption("codex", "Codex", True),
-        PluginOption("claude", "Claude Code", True),
-        PluginOption("copilot", "Copilot CLI", True),
-        PluginOption("codex_home", "Codex folder", "", "Empty: CODEX_HOME or ~/.codex."),
-        PluginOption(
-            "claude_home", "Claude Code folder", "", "Empty: CLAUDE_CONFIG_DIR or ~/.claude."
+        *(PluginOption(p.value, p.label, True) for p in Provider),
+        *(
+            PluginOption(
+                _home_option(p),
+                f"{p.label} folder",
+                "",
+                f"Empty: {p.home_variable} or ~/.{p.value}.",
+            )
+            for p in Provider
         ),
-        PluginOption("copilot_home", "Copilot folder", "", "Empty: COPILOT_HOME or ~/.copilot."),
     )
 
     def refresh(self, context: PluginContext) -> Iterable[PluginItem]:
-        try:
+        with _user_facing_errors():
             excluded = read_exclusions(context.data_dir)
             found = current_sessions(context)
             if context.cancel.is_set():
@@ -70,23 +85,19 @@ class AISessionsPlugin(Plugin):
             visible = visible_sessions(
                 found,
                 excluded,
-                int(context.options["max_age_days"]),
-                int(context.options["limit"]),
+                int(context.options[MAX_AGE_OPTION]),
+                int(context.options[LIMIT_OPTION]),
                 time.time(),
             )
             return [session_item(session) for session in visible]
-        except SessionError as exc:
-            raise PluginError(str(exc)) from exc
 
     def open(self, item: PluginItem, context: PluginContext) -> None:
-        try:
+        with _user_facing_errors():
             if item.key in read_exclusions(context.data_dir):
                 raise SessionError(
                     "This session is excluded. Restore it in the plugin settings first."
                 )
-            resume_session(session_from_item(item))
-        except SessionError as exc:
-            raise PluginError(str(exc)) from exc
+            resume_session(ResumeTarget.from_data(item.data))
 
     def commands(self) -> tuple[PluginCommand, ...]:
         return (
@@ -95,11 +106,20 @@ class AISessionsPlugin(Plugin):
         )
 
 
+@contextmanager
+def _user_facing_errors() -> Iterator[None]:
+    """Translate at the host boundary, so the inner modules stay free of its SDK."""
+    try:
+        yield
+    except SessionError as exc:
+        raise PluginError(str(exc)) from exc
+
+
 def current_sessions(context: PluginContext) -> list[Session]:
     """Translate host settings once; readers have no dependency on the host SDK."""
     sources = [
         SessionSource(
-            provider, session_home(provider, str(context.options[f"{provider.value}_home"]))
+            provider, session_home(provider, str(context.options[_home_option(provider)]))
         )
         for provider in Provider
         if context.options[provider.value]
@@ -118,30 +138,32 @@ def session_item(session: Session) -> PluginItem:
         keywords=(session.provider.label, session.cwd, session.id),
         icon=str(ASSETS / f"{session.provider.value}.svg"),
         routes=(session.provider.value,),
-        data={
-            "provider": session.provider.value,
-            "id": session.id,
-            "cwd": session.cwd,
-            "home": str(session.home),
-        },
+        data=session.resume_target.as_data(),
+        chips=_activity_chips(session.updated),
     )
 
 
-def session_from_item(item: PluginItem) -> Session:
-    """Validate cached values before handing them to the terminal boundary."""
+def _activity_chips(updated: float) -> tuple[Chip, ...]:
+    """The last activity in local time; an absurd value from a foreign file shows no chip."""
+    if not updated:
+        return ()
     try:
-        provider = Provider(item.data.get("provider"))
-    except (ValueError, TypeError) as exc:
-        raise SessionError("This item does not identify a supported CLI.") from exc
-    values = {key: item.data.get(key) for key in ("id", "cwd", "home")}
-    if not all(isinstance(value, str) and value for value in values.values()):
-        raise SessionError("This session has incomplete resume information. Refresh the plugin.")
-    return Session(provider, values["id"], item.name, values["cwd"], 0, Path(values["home"]))
+        moment = datetime.fromtimestamp(updated)
+    except (OverflowError, OSError, ValueError):
+        return ()
+    return (Chip(activity_label(moment, date.today())),)
+
+
+def activity_label(moment: datetime, today: date) -> str:
+    """Name today and yesterday; the frequent refresh keeps the names current."""
+    days_ago = (today - moment.date()).days
+    day = NAMED_DAYS_AGO.get(days_ago) or moment.strftime(ACTIVITY_DATE_FORMAT)
+    return f"{day} {moment.strftime(ACTIVITY_TIME_FORMAT)}"
 
 
 def exclude_session(context: PluginContext) -> str | None:
     """Hide one explicitly chosen session while retaining its conversation files."""
-    try:
+    with _user_facing_errors():
         excluded = read_exclusions(context.data_dir)
         choices = {
             session.key: session.description
@@ -157,13 +179,10 @@ def exclude_session(context: PluginContext) -> str | None:
         write_exclusions(context.data_dir, excluded)
         return "Session excluded. Its conversation is kept. Use Restore session to show it again."
 
-    except SessionError as exc:
-        raise PluginError(str(exc)) from exc
-
 
 def restore_session(context: PluginContext) -> str | None:
     """Restore an identity even if its provider is currently disabled or removed."""
-    try:
+    with _user_facing_errors():
         excluded = read_exclusions(context.data_dir)
         if not excluded:
             return "There are no excluded sessions."
@@ -173,6 +192,3 @@ def restore_session(context: PluginContext) -> str | None:
         del excluded[key]
         write_exclusions(context.data_dir, excluded)
         return "Session restored. It will appear after the next refresh."
-
-    except SessionError as exc:
-        raise PluginError(str(exc)) from exc

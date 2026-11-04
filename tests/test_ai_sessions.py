@@ -5,12 +5,16 @@ from __future__ import annotations
 import base64
 import importlib
 import json
+import os
+import shutil
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import unittest
 from contextlib import closing
 from dataclasses import replace
+from datetime import date, datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -34,6 +38,7 @@ copilot = importlib.import_module(package_name + ".readers.copilot")
 records = importlib.import_module(package_name + ".readers.records")
 SESSION_ID = "01a18779-4b8b-7f50-9473-de3ca09ee959"
 OTHER_ID = "a8a3bd94-458b-421d-b060-becba4b573b6"
+SHELL_TIMEOUT_SECONDS = 60
 
 
 def write_records(path: Path, records: list[object]) -> None:
@@ -75,6 +80,11 @@ class SessionTestCase(unittest.TestCase):
         )
         return path
 
+    def claude_sessions(self) -> list[domain.Session]:
+        return list(
+            claude.claude_sessions(self.root / "claude", self.context.cancel, self.context.log)
+        )
+
 
 class DiscoveryTest(SessionTestCase):
     def test_implementation_loads_in_isolation_without_changing_import_paths(self) -> None:
@@ -88,7 +98,7 @@ class DiscoveryTest(SessionTestCase):
 
     def test_routes_icons_manifest_and_host_search(self) -> None:
         self.assertEqual(FOUND.problems, [])
-        self.assertEqual(FOUND.sources[PLUGIN.id].version, "1.0.0")
+        self.assertEqual(FOUND.sources[PLUGIN.id].version, "1.0.1")
         self.assertEqual({route.id for route in PLUGIN.routes}, {p.value for p in domain.Provider})
         icons = {
             application.session_item(
@@ -111,6 +121,34 @@ class DiscoveryTest(SessionTestCase):
         self.assertEqual(host.search(other_query, [config], 10).hits, [])
 
 
+class ActivityChipTest(SessionTestCase):
+    def item_chips(self, updated: float) -> list[str]:
+        session = domain.Session(
+            domain.Provider.CODEX, SESSION_ID, "Name", str(self.root), updated, self.root
+        )
+        return [chip.text for chip in application.session_item(session).chips]
+
+    def test_row_shows_the_last_activity_in_local_time(self) -> None:
+        updated = datetime(2020, 11, 4, 13, 9).timestamp()
+        self.assertEqual(self.item_chips(updated), ["2020-11-04 13:09"])
+
+    def test_today_and_yesterday_are_named_by_calendar_day(self) -> None:
+        today = date(2026, 11, 4)
+        for moment, label in [
+            (datetime(2026, 11, 4, 0, 1), "Today 00:01"),
+            (datetime(2026, 11, 3, 23, 59), "Yesterday 23:59"),
+            (datetime(2026, 11, 3, 0, 0), "Yesterday 00:00"),
+            (datetime(2026, 11, 2, 23, 59), "2026-11-02 23:59"),
+            (datetime(2026, 11, 5, 8, 0), "2026-11-05 08:00"),  # A clock that ran ahead.
+        ]:
+            with self.subTest(moment=moment):
+                self.assertEqual(application.activity_label(moment, today), label)
+
+    def test_unknown_or_absurd_activity_shows_no_chip_and_keeps_the_item(self) -> None:
+        self.assertEqual(self.item_chips(0.0), [])
+        self.assertEqual(self.item_chips(1e30), [])
+
+
 class ReadersTest(SessionTestCase):
     def test_missing_installations_and_corrupt_provider_do_not_stop_others(self) -> None:
         with patch.object(terminal.shutil, "which", return_value=None) as lookup:
@@ -131,7 +169,7 @@ class ReadersTest(SessionTestCase):
         write_records(nested, [{"type": "user", "cwd": str(self.root)}])
         sidechain = path.with_name(f"{OTHER_ID}.jsonl")
         write_records(sidechain, [{"type": "user", "cwd": str(self.root), "isSidechain": True}])
-        found = list(claude.claude_sessions(self.root / "claude", self.context.cancel))
+        found = self.claude_sessions()
         self.assertEqual(len(found), 1)
         self.assertEqual((found[0].id, found[0].title), (SESSION_ID, "My launcher session"))
 
@@ -144,8 +182,59 @@ class ReadersTest(SessionTestCase):
             stream.write(
                 json.dumps({"type": "custom-title", "customTitle": "Renamed recently"}) + "\n"
             )
-        found = list(claude.claude_sessions(self.root / "claude", self.context.cancel))
-        self.assertEqual(found[0].title, "Renamed recently")
+        self.assertEqual(self.claude_sessions()[0].title, "Renamed recently")
+
+    def test_claude_title_skips_injected_context_and_slash_commands(self) -> None:
+        path = self.root / "claude" / "projects" / "project" / f"{SESSION_ID}.jsonl"
+        write_records(
+            path,
+            [
+                {
+                    "type": "user",
+                    "cwd": str(self.root),
+                    "isMeta": True,
+                    "message": {"content": "<local-command-caveat>Caveat</local-command-caveat>"},
+                },
+                {"type": "user", "message": {"content": "<command-name>/usage</command-name>"}},
+                {"type": "user", "message": {"content": "The real question"}},
+            ],
+        )
+        self.assertEqual(self.claude_sessions()[0].title, "The real question")
+
+    def test_claude_ignores_non_interactive_runs_and_transcripts_without_messages(self) -> None:
+        folder = self.root / "claude" / "projects" / "project"
+        write_records(
+            folder / f"{SESSION_ID}.jsonl",
+            [
+                {
+                    "type": "user",
+                    "cwd": str(self.root),
+                    "entrypoint": "sdk-cli",
+                    "message": {"content": "Scripted"},
+                }
+            ],
+        )
+        write_records(
+            folder / f"{OTHER_ID}.jsonl", [{"type": "permission-mode", "cwd": str(self.root)}]
+        )
+        self.assertEqual(self.claude_sessions(), [])
+
+    def test_long_path_prefix_never_reaches_the_project_folder(self) -> None:
+        self.assertEqual(records.plain_path("\\\\?\\D:\\Project"), "D:\\Project")
+        self.assertEqual(records.plain_path("\\\\?\\UNC\\server\\share"), "\\\\server\\share")
+        self.assertEqual(records.plain_path("D:\\Project"), "D:\\Project")
+        home = self.root / "codex"
+        write_records(
+            home / "sessions" / "rollout.jsonl",
+            [
+                {
+                    "type": "session_meta",
+                    "payload": {"id": SESSION_ID, "cwd": "\\\\?\\D:\\Project", "source": "cli"},
+                }
+            ],
+        )
+        found = list(codex.codex_sessions(home, self.context.cancel, self.context.log))
+        self.assertEqual(found[0].cwd, "D:\\Project")
 
     def test_codex_database_ignores_archived_and_internal_threads(self) -> None:
         home = self.root / "codex"
@@ -248,7 +337,7 @@ class ReadersTest(SessionTestCase):
         found = list(copilot.copilot_sessions(home, self.context.cancel, self.context.log))
         self.assertEqual(found[0].title, "Fallback title")
         workspace.write_text("name: 'Custom name'\n", encoding="utf-8")
-        with patch.dict(sys.modules, {"yaml": None}):
+        with patch.object(copilot, "yaml", None):
             found = list(copilot.copilot_sessions(home, self.context.cancel, self.context.log))
         self.assertEqual(found[0].title, "Fallback title")
 
@@ -371,9 +460,7 @@ class ResumeTest(SessionTestCase):
         for provider in domain.Provider:
             for use_terminal in (True, False):
                 with self.subTest(provider=provider, terminal=use_terminal):
-                    item = application.session_item(
-                        domain.Session(provider, SESSION_ID, "Name", str(project), 0, self.root)
-                    )
+                    target = domain.ResumeTarget(provider, SESSION_ID, str(project), self.root)
 
                     def which(name: str, use_terminal: bool = use_terminal) -> str | None:
                         if name == "wt.exe" and not use_terminal:
@@ -384,7 +471,7 @@ class ResumeTest(SessionTestCase):
                         patch.object(terminal.shutil, "which", side_effect=which),
                         patch.object(terminal.subprocess, "Popen") as launch,
                     ):
-                        terminal.resume_session(application.session_from_item(item))
+                        terminal.resume_session(target)
                     command = launch.call_args.args[0]
                     script = base64.b64decode(command[-1]).decode("utf-16-le")
                     expected = "resume" if provider == domain.Provider.CODEX else "--resume"
@@ -393,38 +480,74 @@ class ResumeTest(SessionTestCase):
                     self.assertIn(f"$env:{provider.home_variable}", script)
                     self.assertEqual(launch.call_args.kwargs["cwd"], str(project))
                     self.assertEqual("new-tab" in command, use_terminal)
+                    self.assertNotIn(str(project), command)  # wt.exe splits at its semicolon.
                     self.assertIn("-NoExit", command)
                     self.assertNotIn("shell", launch.call_args.kwargs)
 
-    def test_missing_cli_or_project_gives_an_actionable_error(self) -> None:
-        item = application.session_item(
-            domain.Session(domain.Provider.CODEX, SESSION_ID, "Name", str(self.root), 0, self.root)
+    def test_default_home_keeps_the_cli_on_its_own_defaults(self) -> None:
+        for provider in domain.Provider:
+            target = domain.ResumeTarget(
+                provider, SESSION_ID, str(self.root), provider.default_home
+            )
+            with self.subTest(provider=provider), patch.dict(os.environ):
+                os.environ.pop(provider.home_variable, None)
+                self.assertNotIn("$env:", terminal.resume_script(target, "cli.exe"))
+                os.environ[provider.home_variable] = str(self.root / "elsewhere")
+                self.assertIn(
+                    f"$env:{provider.home_variable}", terminal.resume_script(target, "cli.exe")
+                )
+
+    @unittest.skipUnless(shutil.which("powershell.exe"), "Needs Windows PowerShell.")
+    def test_script_reaches_the_cli_with_literal_arguments_in_the_project(self) -> None:
+        project = self.root / "project's $x; space"
+        project.mkdir()
+        cli = self.root / "fake cli.cmd"
+        cli.write_text("@echo %CD%^|%CODEX_HOME%^|%*\n", encoding="ascii")
+        target = domain.ResumeTarget(domain.Provider.CODEX, SESSION_ID, str(project), self.root)
+        script = terminal.resume_script(target, str(cli))
+        encoded = base64.b64encode(script.encode(terminal.POWERSHELL_ENCODING)).decode("ascii")
+        done = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",  # PowerShell's progress output is in no fixed code page.
+            timeout=SHELL_TIMEOUT_SECONDS,
         )
+        self.assertEqual(
+            done.stdout.strip().casefold(),
+            f"{project}|{self.root}|resume {SESSION_ID}".casefold(),
+            done.stderr,
+        )
+
+    def test_missing_cli_or_project_gives_an_actionable_error(self) -> None:
+        target = domain.ResumeTarget(domain.Provider.CODEX, SESSION_ID, str(self.root), self.root)
         with patch.object(terminal.shutil, "which", return_value=None):
             with self.assertRaisesRegex(domain.SessionError, "PATH"):
-                terminal.resume_session(application.session_from_item(item))
-        missing = application.session_item(
-            domain.Session(
-                domain.Provider.CODEX, SESSION_ID, "Name", str(self.root / "gone"), 0, self.root
-            )
-        )
+                terminal.resume_session(target)
+        missing = replace(target, cwd=str(self.root / "gone"))
         with self.assertRaisesRegex(domain.SessionError, "no longer exists"):
-            terminal.resume_session(application.session_from_item(missing))
+            terminal.resume_session(missing)
 
-    def test_invalid_session_id_cannot_become_a_command_argument(self) -> None:
-        item = PluginItem(
-            "bad",
-            "Bad",
-            data={
-                "provider": "codex",
-                "id": "--last; echo test",
-                "cwd": str(self.root),
-                "home": str(self.root),
-            },
+    def test_cached_items_keep_their_target_and_are_validated(self) -> None:
+        session = domain.Session(
+            domain.Provider.CODEX, SESSION_ID, "Name", str(self.root), 0, self.root
         )
+        data = application.session_item(session).data
+        self.assertEqual(domain.ResumeTarget.from_data(data), session.resume_target)
+        for broken, message in [
+            ({"provider": "other"}, "supported CLI"),
+            ({"id": "--last; echo test"}, "invalid session ID"),
+            ({"cwd": ""}, "incomplete"),
+            ({"home": None}, "incomplete"),
+        ]:
+            with self.subTest(broken=broken), self.assertRaisesRegex(domain.SessionError, message):
+                domain.ResumeTarget.from_data({**data, **broken})
+
+    def test_invalid_cached_session_never_launches_anything(self) -> None:
+        item = PluginItem("bad", "Bad", data={"provider": "codex", "id": "--last; echo test"})
         with patch.object(terminal.subprocess, "Popen") as launch:
-            with self.assertRaisesRegex(domain.SessionError, "invalid session ID"):
-                terminal.resume_session(application.session_from_item(item))
+            with self.assertRaisesRegex(PluginError, "invalid session ID"):
+                PLUGIN.open(item, self.context)
         launch.assert_not_called()
 
 

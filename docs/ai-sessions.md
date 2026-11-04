@@ -21,7 +21,10 @@ PyYAML for Copilot's workspace metadata. Restart WinLauncher after activation.
 Session titles, working directories and session IDs are searchable. A chosen
 session name takes precedence over an automatic title where the local format
 exposes it; otherwise the first user message or the session ID supplies a title.
-Sessions are ordered by their last known activity, newest first.
+Sessions are ordered by their last known activity, newest first, and each row shows
+it in local time as a chip before the working directory: `Today 13:09`,
+`Yesterday 09:12` or `2026-11-02 18:40`.
+Chips need WinLauncher 0.15.10 or newer.
 
 Opening a result starts a new Windows Terminal window in the session's project
 directory, using PowerShell and the corresponding command:
@@ -80,17 +83,23 @@ and count filters.
 | Claude Code | `CLAUDE_CONFIG_DIR` or `~/.claude` | `projects/*/*.jsonl`, excluding nested subagents and sidechains |
 | Copilot CLI | `COPILOT_HOME` or `~/.copilot` | `session-state/*/events.jsonl` and `workspace.yaml`, plus optional summaries from `session-store.db` |
 
-A configured provider folder overrides the environment and default. Resuming
-sets the same CLI home variable in the new terminal, so custom homes do not
-accidentally resume against another history.
+A configured provider folder overrides the environment and default. For a custom
+home, resuming sets the same CLI home variable in the new terminal, so it does not
+accidentally resume against another history. A default installation is left without
+the variable: with `CLAUDE_CONFIG_DIR` set, Claude Code moves `.claude.json` from the
+profile into that folder and would start without the user's global state.
 
 SQLite connections use read-only mode and a one-second lock timeout. Transcript
 readers sample at most 128 KiB from each end of a file; they do not load entire
 large conversations. Invalid JSON records are skipped. Missing providers yield
 no sessions, and a filesystem or SQLite failure in one provider is logged while
 the others remain available. Codex archived sessions, internal subagents and
-non-interactive `exec` sessions are omitted. A damaged exclusions file raises a
-plugin error instead of silently showing previously hidden sessions again.
+non-interactive `exec` sessions are omitted, as are Claude Code's non-interactive
+runs (`claude -p`, the Agent SDK) and transcripts without a message. Titles from
+first messages skip Claude Code's injected context and slash-command markup. Codex's
+`\\?\` long-path prefix is removed from project folders, because a process started
+in such a folder would run in the Windows folder instead. A damaged exclusions file
+raises a plugin error instead of silently showing previously hidden sessions again.
 
 ## Architecture
 
@@ -125,5 +134,6 @@ keeps normal relative imports inside the implementation, avoids modifying
 extra package installation are required.
 
 Tests load through WinLauncher's real discovery and host APIs and cover provider
-formats, routes, age and count filters, exclusion persistence, missing tools,
-and terminal arguments. They start no interactive AI sessions.
+formats, routes, age and count filters, exclusion persistence, missing tools and
+terminal arguments. One test runs the resume script in a real PowerShell against a
+stand-in CLI. They start no interactive AI sessions.
