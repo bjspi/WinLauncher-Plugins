@@ -45,11 +45,11 @@ class DiscoveryTest(unittest.TestCase):
     def test_winlauncher_finds_the_plugin_folder_with_its_version(self):
         found = FOUND
         self.assertEqual(found.problems, [])
-        self.assertEqual([plugin.id for plugin in found.plugins], ["telegram"])
+        self.assertIn("telegram", [plugin.id for plugin in found.plugins])
         source = found.sources["telegram"]
         self.assertEqual((source.origin, source.version), ("telegram", "1.0.0"))
         self.assertEqual(source.folder, PLUGINS / "telegram")
-        plugin = found.plugins[0]
+        plugin = next(plugin for plugin in found.plugins if plugin.id == "telegram")
         self.assertEqual((plugin.label, plugin.keyword), ("Telegram", "tg"))
         self.assertTrue(Path(plugin.icon).is_file())
 
