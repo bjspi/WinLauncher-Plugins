@@ -35,6 +35,7 @@ annual-report.pdf             D:\Documents\2026
 | <img src="plugins/telegram/assets/telegram.svg" width="16"> [**Telegram**](#-telegram) | Your recent Telegram chats, opened in Telegram Desktop | `tg` |
 | <img src="plugins/ai_sessions/assets/sessions.svg" width="16"> [**AI Sessions**](docs/ai-sessions.md) | Codex, Claude Code and Copilot CLI sessions, resumed in a terminal | `ai`, `sessions`, `codex`, `claude`, `copilot` |
 | <img src="plugins/bookmarks/assets/bookmarks.svg" width="16"> [**Bookmarks**](docs/bookmarks.md) | The bookmarks of Chrome, Edge, Brave and Firefox, also from portable profiles | `bm`, `bookmarks` |
+| <img src="plugins/answers/assets/answers.svg" width="16"> [**Answers**](docs/answers.md) | Units, currencies, dates and the time elsewhere, answered above the results | — (answers what you type) |
 | 📐 [`_template`](plugins/_template) | Not a plugin: the skeleton to copy for a new one | — |
 
 ## ✨ How it feels
@@ -112,7 +113,7 @@ your chat list.
 
 Telegram shows the session as *WinLauncher* under Settings → Devices.
 **Sign out** ends it on Telegram's side too, and deletes the local session,
-avatars and list.
+avatars and list; which chats you left out is kept.
 
 > [!WARNING]
 > The session file `%USERPROFILE%\.WinLauncher\plugin-data\telegram\telegram.session`
@@ -136,6 +137,26 @@ Telegram Desktop has no link for basic groups or for people without a username
 whose number is hidden (`tg://user?id=` does not work there), so the plugin leaves
 those chats out. A peer kind the installed Telethon does not model is skipped, so
 one unknown chat cannot stop the list.
+
+### Leaving chats out
+
+- **Hide large groups** (off by default) leaves out every group with at least
+  *Large from (members)* members, 20 unless you change it. Telegram's chat list
+  leaves out the size of most supergroups, so the plugin asks for it once per
+  group, at most 20 groups per refresh, and keeps the answer for a day; a long
+  list is complete after a few refreshes. A group whose size is not known yet, or
+  that hides it, stays listed.
+- **Choose chats…** on the settings card (WinLauncher 0.17 or newer) shows the
+  chats of the last refresh as a checklist with a filter: untick chats, groups or
+  channels you never want to find here, **Save**, and they are gone after the next
+  refresh. Tick them again the same way. A left-out chat that dropped out of the
+  recent chats stays in the checklist, unticked, so it can always come back.
+- **Right-click a chat → Exclude…** leaves out that one chat at once, the same as
+  unticking it.
+
+The choice is kept in `excluded-chats.json` in the plugin's data folder and
+survives refreshes, restarts and updates. Left-out chats still count towards
+*Chats*, since Telegram lists them before the plugin filters.
 
 ## 🛠️ Write your own
 

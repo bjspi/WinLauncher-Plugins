@@ -107,9 +107,42 @@ only when opening needs more than that. Runs on the action worker.
 def commands(self) -> tuple[PluginCommand, ...]:
 ```
 Buttons for your settings card, such as *Sign in…*. `PluginCommand(label, run)`;
-`run(context)` may ask the user for one line of text with
-`context.ask(title, text, secret=False)` and returns a message to show. With
+`run(context)` returns a message to show and may open dialogs in WinLauncher's
+look, each returning `None` when the user cancels:
+
+| Call | Shows | Returns |
+| --- | --- | --- |
+| `context.ask(title, text, secret=False)` | One line of text, hidden for passwords | The text |
+| `context.choose(title, text, choices)` | A checklist of `Choice(key, label, detail, checked)` rows, with a filter and *All* / *None* | The `frozenset` of ticked keys |
+| `context.form(title, text, fields)` | `PluginOption` fields as on the settings card: switches, numbers, lines, multiline boxes | The values by key, validated |
+
+A form's fields start at their `default`, so pass the current values as defaults.
+Plugins never open windows themselves: commands run on a worker thread, and the
+host shows the dialog on the GUI thread while the worker waits. `choose` and `form`
+exist since WinLauncher 0.17; on older versions `getattr(context, "choose", None)`
+is `None`, which the Telegram plugin turns into a message to update. With
 `forgets_items=True` the cached list is dropped afterwards, as *Sign out* needs.
+
+```python
+def actions(self, item: PluginItem) -> tuple[PluginAction, ...]:
+```
+Further entries for the item's right-click menu, such as AI Sessions' *Open project
+folder*: `PluginAction(label, run, refreshes=False)`. `run(item, context)` runs on a
+worker like a command, may show the same dialogs and returns a message or `None`;
+`refreshes=True` refreshes your list afterwards. `actions` itself is called on the
+GUI thread while the menu opens: look only at `item`, never at files or the network.
+
+```python
+def exclude(self, item: PluginItem, context: PluginContext) -> bool:
+```
+Define it, and every item's menu offers **Exclude…**. You decide what is left out,
+and keep it in `context.data_dir`: the item alone, as Telegram does with a chat, or
+more of it, chosen in a short checklist, as Bookmarks offers the bookmark's folders
+and AI Sessions the project folder. A path-like plugin, such as one for an FTP
+server, may ask for a pattern with `context.form`. Return `True` when something
+was excluded and `False` when the user cancelled: WinLauncher then drops the item
+at once and refreshes your list, which removes whatever else you excluded. Offer a
+way back, such as a settings button with a checklist of the exclusions.
 
 ### What an item carries
 
