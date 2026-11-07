@@ -98,7 +98,7 @@ class DiscoveryTest(SessionTestCase):
 
     def test_routes_icons_manifest_and_host_search(self) -> None:
         self.assertEqual(FOUND.problems, [])
-        self.assertEqual(FOUND.sources[PLUGIN.id].version, "1.0.2")
+        self.assertEqual(FOUND.sources[PLUGIN.id].version, "1.1.0")
         self.assertEqual({route.id for route in PLUGIN.routes}, {p.value for p in domain.Provider})
         icons = {
             application.session_item(
@@ -461,6 +461,69 @@ class ExclusionTest(SessionTestCase):
                 options = {**self.context.options, "excluded_names": patterns}
                 items = list(PLUGIN.refresh(PluginContext(self.root, options)))
                 self.assertEqual(len(items), visible)
+
+    def exclude(self, item: PluginItem, ticked: set[str] | None) -> tuple[bool, list]:
+        """Exclude… on `item`, ticking `ticked`; also the rows the checklist showed."""
+        shown = []
+
+        def choose(title, text, choices):
+            shown.extend(choices)
+            return None if ticked is None else frozenset(ticked)
+
+        context = PluginContext(self.root, self.context.options, choose=choose)
+        return PLUGIN.exclude(item, context), shown
+
+    def test_exclude_offers_the_session_and_its_project_folders(self) -> None:
+        self.claude_transcript()
+        (item,) = PLUGIN.refresh(self.context)
+        excluded, shown = self.exclude(item, None)
+        self.assertFalse(excluded)
+        folders = domain.project_folders(str(self.root), application.FOLDERS_OFFERED)
+        self.assertEqual(
+            [(row.key, row.checked) for row in shown],
+            [(item.key, True), *((exclusions.folder_key(f), False) for f in folders)],
+        )
+        self.assertEqual(exclusions.read_exclusions(self.root), {})
+        self.assertFalse(self.exclude(item, set())[0])
+
+    def test_excluding_a_project_folder_hides_its_sessions_until_restored(self) -> None:
+        self.claude_transcript()
+        (item,) = PLUGIN.refresh(self.context)
+        folder = exclusions.folder_key(str(self.root))
+        self.assertTrue(self.exclude(item, {folder})[0])
+        self.assertEqual(list(PLUGIN.refresh(self.context)), [])
+        self.assertEqual(
+            exclusions.read_exclusions(self.root), {folder: f"Every session in {self.root}"}
+        )
+        answers = iter(["every session", "1"])
+        context = PluginContext(
+            self.root, self.context.options, ask=lambda *args, **kwargs: next(answers)
+        )
+        self.assertIn("restored", application.restore_session(context))
+        self.assertEqual(len(list(PLUGIN.refresh(self.context))), 1)
+
+    def test_folders_contain_their_subfolders_ignoring_case_and_slashes(self) -> None:
+        inside = domain.is_within_folder
+        self.assertTrue(inside(r"D:\Projects\App", r"d:/projects/app"))
+        self.assertTrue(inside(r"D:\Projects\App\src", r"D:\Projects\App"))
+        self.assertFalse(inside(r"D:\Projects\Apps", r"D:\Projects\App"))
+        self.assertFalse(inside("", r"D:\Projects"))
+        self.assertEqual(
+            domain.project_folders(r"D:\Projects\App\src", 3),
+            (r"D:\Projects\App\src", r"D:\Projects\App", r"D:\Projects"),
+        )
+        self.assertEqual(domain.project_folders("D:\\", 3), ())
+
+    def test_the_project_folder_action_opens_the_sessions_folder(self) -> None:
+        self.claude_transcript()
+        (item,) = PLUGIN.refresh(self.context)
+        (action,) = PLUGIN.actions(item)
+        with patch.object(application.os, "startfile", create=True) as start:
+            self.assertIsNone(action.run(item, self.context))
+        start.assert_called_once_with(self.root)
+        moved = replace(item, data={**item.data, "cwd": str(self.root / "gone")})
+        with self.assertRaisesRegex(PluginError, "no longer exists"):
+            action.run(moved, self.context)
 
     def test_exclude_command_does_not_offer_sessions_a_pattern_already_hides(self) -> None:
         self.claude_transcript()

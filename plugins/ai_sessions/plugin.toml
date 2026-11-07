@@ -1,5 +1,5 @@
-version = "1.0.2"
+version = "1.1.0"
 name = "AI Sessions"
-description = "Find local Codex, Claude Code and GitHub Copilot CLI sessions, resume them in a terminal, and hide individual sessions."
+description = "Find local Codex, Claude Code and GitHub Copilot CLI sessions, resume them in a terminal, and hide single sessions or whole project folders."
 icon = "assets/sessions.svg"
 requires = ["PyYAML>=6.0,<7"]

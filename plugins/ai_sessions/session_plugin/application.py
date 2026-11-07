@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
@@ -10,7 +11,9 @@ from pathlib import Path
 
 from winlauncher.plugins.api import (
     Chip,
+    Choice,
     Plugin,
+    PluginAction,
     PluginCommand,
     PluginContext,
     PluginError,
@@ -28,9 +31,16 @@ from .domain import (
     SessionError,
     SessionSource,
     parse_name_patterns,
+    project_folders,
     visible_sessions,
 )
-from .exclusions import choose_session, read_exclusions, write_exclusions
+from .exclusions import (
+    choose_session,
+    excluded_folders,
+    folder_key,
+    read_exclusions,
+    write_exclusions,
+)
 from .terminal import resume_session
 
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
@@ -44,6 +54,7 @@ LONGEST_MAX_AGE_DAYS = 3650
 ACTIVITY_DATE_FORMAT = "%Y-%m-%d"
 ACTIVITY_TIME_FORMAT = "%H:%M"
 NAMED_DAYS_AGO = {0: "Today", 1: "Yesterday"}
+FOLDERS_OFFERED = 3  # The project folder and two above it, for Exclude….
 
 
 def _home_option(provider: Provider) -> str:
@@ -116,6 +127,35 @@ class AISessionsPlugin(Plugin):
                 )
             resume_session(ResumeTarget.from_data(item.data))
 
+    def actions(self, item: PluginItem) -> tuple[PluginAction, ...]:
+        return (PluginAction("Open project folder", open_project_folder),)
+
+    def exclude(self, item: PluginItem, context: PluginContext) -> bool:
+        """This session, or every session of its project folder or a folder above it."""
+        with _user_facing_errors():
+            cwd = ResumeTarget.from_data(item.data).cwd
+            excluded = read_exclusions(context.data_dir)
+            choices = [
+                Choice(item.key, "Only this session", item.name, checked=True),
+                *(
+                    Choice(folder_key(folder), "Every session in", folder)
+                    for folder in project_folders(cwd, FOLDERS_OFFERED)
+                ),
+            ]
+            ticked = context.choose(
+                "Exclude",
+                "Ticked ones are left out of the search; Restore session… brings them back. "
+                "The conversations themselves are kept.",
+                choices,
+            )
+            if not ticked:
+                return False
+            for choice in choices:
+                if choice.key in ticked:
+                    excluded[choice.key] = _exclusion_description(choice, item)
+            write_exclusions(context.data_dir, excluded)
+            return True
+
     def commands(self) -> tuple[PluginCommand, ...]:
         return (
             PluginCommand("Exclude session…", exclude_session, forgets_items=True),
@@ -134,7 +174,23 @@ def _user_facing_errors() -> Iterator[None]:
 
 def _exclusion_rules(excluded: Mapping[str, str], context: PluginContext) -> ExclusionRules:
     patterns = parse_name_patterns(str(context.options[EXCLUDED_NAMES_OPTION]))
-    return ExclusionRules(excluded.keys(), patterns)
+    return ExclusionRules(excluded.keys(), patterns, excluded_folders(excluded))
+
+
+def open_project_folder(item: PluginItem, context: PluginContext) -> None:
+    """The folder the session works in, in Explorer."""
+    with _user_facing_errors():
+        cwd = Path(ResumeTarget.from_data(item.data).cwd)
+    if not cwd.is_dir():
+        raise PluginError(f"The project folder no longer exists: {cwd}")
+    os.startfile(cwd)  # noqa: S606 - a folder the session itself recorded.
+
+
+def _exclusion_description(choice: Choice, item: PluginItem) -> str:
+    """What Restore session… shows for an exclusion, and finds it by."""
+    if choice.key == item.key:
+        return f"{item.title} · {item.subtitle}"
+    return f"Every session in {choice.detail}"
 
 
 def current_sessions(context: PluginContext) -> list[Session]:

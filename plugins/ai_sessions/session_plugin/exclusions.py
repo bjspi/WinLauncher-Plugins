@@ -9,6 +9,9 @@ from pathlib import Path
 from .domain import SessionError
 
 EXCLUSIONS_FILE = "excluded-sessions.json"
+# Besides session keys, the file keeps project folders under keys with this prefix,
+# so Restore session… offers both and older files stay valid.
+FOLDER_PREFIX = "folder:"
 # The host's question dialog has a fixed width, wraps its text and cannot scroll: a list
 # longer than this, or lines that wrap, could push its buttons off the screen.
 CHOICE_LIMIT = 8
@@ -43,6 +46,17 @@ def write_exclusions(folder: Path, excluded: Mapping[str, str]) -> None:
         temporary.replace(path)
     except OSError as exc:
         raise SessionError(f"Could not save excluded sessions: {exc}") from exc
+
+
+def folder_key(folder: str) -> str:
+    return FOLDER_PREFIX + folder
+
+
+def excluded_folders(excluded: Mapping[str, str]) -> tuple[str, ...]:
+    """The project folders among the exclusions; the other keys name sessions."""
+    return tuple(
+        key.removeprefix(FOLDER_PREFIX) for key in excluded if key.startswith(FOLDER_PREFIX)
+    )
 
 
 def choose_session(ask: Ask, choices: Mapping[str, str], title: str) -> str | None:

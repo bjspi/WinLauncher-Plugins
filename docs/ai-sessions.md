@@ -68,14 +68,20 @@ as a whole: `*probe*` anywhere in the title, `Resume ?revious task` with one wil
 character, `[abc]*` for a set of first letters. Removing the line shows those sessions
 again; **Restore session…** does not list them.
 
-**Exclude session…** searches by title, project, provider or ID and then asks for
-the number of the exact session to hide, among at most eight matches.
-**Restore session…** brings one back.
-These buttons use the settings commands already supported by WinLauncher; the
-current plugin API has no custom per-result context-menu actions.
+**Right-click a session → Exclude…** (WinLauncher 0.17 or newer) offers *Only this
+session*, ticked, and *Every session in* its project folder and up to two folders
+above it, never a whole drive. A folder hides every session started in it or
+below it, also later ones. The same menu has **Open project folder**, which shows
+the session's folder in Explorer.
 
-Exclusions survive refreshes, restarts, renames and plugin updates. They are keyed
-by `provider:session-id` and stored atomically in
+**Exclude session…** on the settings card searches by title, project, provider or
+ID and then asks for the number of the exact session to hide, among at most eight
+matches. **Restore session…** brings back a session or a folder, found by its
+title, project or folder.
+
+Exclusions survive refreshes, restarts, renames and plugin updates. Sessions are
+keyed by `provider:session-id`, folders by `folder:<path>`, compared ignoring case
+and slash direction; all are stored atomically in
 `%USERPROFILE%\.WinLauncher\plugin-data\ai_sessions\excluded-sessions.json`
 with a short description for restoring them. Neither excluding nor restoring a
 session changes its conversation files. The host discards its cached list after

@@ -6,7 +6,7 @@ from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from fnmatch import fnmatchcase
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import TypeGuard
 from uuid import UUID
 
@@ -112,16 +112,42 @@ class Session:
 
 @dataclass(frozen=True, slots=True)
 class ExclusionRules:
-    """Which sessions stay hidden: individually chosen ones and names matching a pattern."""
+    """Which sessions stay hidden: chosen ones, those of chosen project folders, and
+    names matching a pattern."""
 
     keys: Collection[str] = ()
     name_patterns: tuple[str, ...] = ()  # Casefolded, as `parse_name_patterns` returns them.
+    folders: tuple[str, ...] = ()  # Every session started in or below one is hidden.
 
     def hides(self, session: Session) -> bool:
         if session.key in self.keys:
             return True
+        if any(is_within_folder(session.cwd, folder) for folder in self.folders):
+            return True
         name = session.display_title.casefold()
         return any(fnmatchcase(name, pattern) for pattern in self.name_patterns)
+
+
+def is_within_folder(path: str, folder: str) -> bool:
+    """Whether `path` is `folder` or below it, as Windows compares paths: ignoring case
+    and the kind of slash."""
+    if not path or not folder:
+        return False
+    inner, outer = PureWindowsPath(path.casefold()), PureWindowsPath(folder.casefold())
+    return inner == outer or outer in inner.parents
+
+
+def project_folders(cwd: str, depth: int) -> tuple[str, ...]:
+    """`cwd` and up to `depth - 1` folders above it, nearest first, never a drive root:
+    excluding a whole drive is not a sensible single choice."""
+    if not cwd:
+        return ()
+    folders = []
+    current = PureWindowsPath(cwd)
+    while current.parent != current and len(folders) < depth:
+        folders.append(str(current))
+        current = current.parent
+    return tuple(folders)
 
 
 def parse_name_patterns(lines: str) -> tuple[str, ...]:
