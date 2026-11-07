@@ -28,12 +28,17 @@ discovery = importlib.import_module(package_name + ".discovery")
 domain = importlib.import_module(package_name + ".domain")
 chromium = importlib.import_module(package_name + ".readers.chromium")
 firefox = importlib.import_module(package_name + ".readers.firefox")
+favicons = importlib.import_module(package_name + ".readers.favicons")
+snapshot = importlib.import_module(package_name + ".readers.snapshot")
+icon_files = importlib.import_module(package_name + ".icon_files")
 html_export = importlib.import_module(package_name + ".readers.html_export")
 
 # 2021-01-01 00:00:00 UTC in Chromium's microseconds since 1601 and in seconds since 1970.
 CHROMIUM_2021 = "13253932800000000"
 UNIX_2021 = 1_609_459_200.0
 MICROSECONDS = 1_000_000
+PNG = b"\x89PNG\r\n\x1a\n"
+ICO = b"\x00\x00\x01\x00"
 
 
 def write_chromium_bookmarks(path: Path, *links: tuple[str, str]) -> None:
@@ -52,6 +57,24 @@ def write_chromium_bookmarks(path: Path, *links: tuple[str, str]) -> None:
     bar = {"type": "folder", "name": "Bookmarks bar", "children": [folder]}
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"roots": {"bookmark_bar": bar}}), encoding="utf-8")
+
+
+def write_chromium_favicons(path: Path, *icons: tuple[str, bytes, int]) -> None:
+    """A Chromium icon cache: one icon per row, linked to its page."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with closing(sqlite3.connect(path)) as database, database:
+        database.executescript(
+            """
+            CREATE TABLE icon_mapping (id INTEGER PRIMARY KEY, page_url TEXT, icon_id INTEGER);
+            CREATE TABLE favicon_bitmaps (id INTEGER PRIMARY KEY, icon_id INTEGER,
+                image_data BLOB, width INTEGER);
+            """
+        )
+        for icon_id, (page, data, width) in enumerate(icons, start=1):
+            database.execute("INSERT INTO icon_mapping VALUES (NULL, ?, ?)", (page, icon_id))
+            database.execute(
+                "INSERT INTO favicon_bitmaps VALUES (NULL, ?, ?, ?)", (icon_id, data, width)
+            )
 
 
 def write_places(path: Path) -> None:
@@ -165,12 +188,12 @@ class FirefoxTest(BookmarksTestCase):
     def test_removes_a_copy_an_interrupted_run_left_but_not_a_current_one(self):
         places = self.root / "profile" / "places.sqlite"
         write_places(places)
-        abandoned = self.data_dir / "places-abandoned"
-        current = self.data_dir / "places-current"
-        abandoned.mkdir()
+        current = self.data_dir / "snapshot-current"
         current.mkdir()
-        hours_ago = abandoned.stat().st_mtime - 2 * firefox.ABANDONED_SNAPSHOT_SECONDS
-        os.utime(abandoned, (hours_ago, hours_ago))
+        for abandoned in (self.data_dir / "snapshot-abandoned", self.data_dir / "places-legacy"):
+            abandoned.mkdir()
+            hours_ago = abandoned.stat().st_mtime - 2 * snapshot.ABANDONED_SNAPSHOT_SECONDS
+            os.utime(abandoned, (hours_ago, hours_ago))
         firefox.read_firefox_places(places, self.data_dir)
         self.assertEqual(list(self.data_dir.iterdir()), [current])
 
@@ -179,7 +202,8 @@ class FirefoxTest(BookmarksTestCase):
         write_places(places)
         wal = places.with_name("places.sqlite-wal")
         wal.write_bytes(b"old frames")
-        states = iter([1, 1, 2, 2, 3, 3, 3, 3])
+        # Database, log and journal: the first attempt sees a change, the second none.
+        states = iter([1, 1, 1, 2, 2, 2, 3, 3, 3, 3, 3, 3])
 
         def state_after_firefox_closes(path: Path) -> int:
             return next(states)
@@ -192,11 +216,11 @@ class FirefoxTest(BookmarksTestCase):
         folder = self.root / "copy"
         folder.mkdir()
         with (
-            patch.object(firefox, "_state", state_after_firefox_closes),
-            patch.object(firefox.shutil, "copyfile", copy_then_close_firefox),
-            patch.object(firefox.time, "sleep"),
+            patch.object(snapshot, "_state", state_after_firefox_closes),
+            patch.object(snapshot.shutil, "copyfile", copy_then_close_firefox),
+            patch.object(snapshot.time, "sleep"),
         ):
-            copy = firefox._snapshot(places, folder)
+            copy = snapshot._snapshot(places, folder)
         self.assertFalse(copy.with_name(wal.name).exists())
 
     def test_a_database_that_keeps_changing_is_reported_after_waiting(self):
@@ -204,12 +228,12 @@ class FirefoxTest(BookmarksTestCase):
         write_places(places)
         states = iter(range(100))
         with (
-            patch.object(firefox, "_state", lambda path: next(states)),
-            patch.object(firefox.time, "sleep") as sleep,
+            patch.object(snapshot, "_state", lambda path: next(states)),
+            patch.object(snapshot.time, "sleep") as sleep,
             self.assertRaises(domain.BookmarkError),
         ):
             firefox.read_firefox_places(places, self.data_dir)
-        self.assertEqual(sleep.call_count, firefox.SNAPSHOT_ATTEMPTS - 1)
+        self.assertEqual(sleep.call_count, snapshot.SNAPSHOT_ATTEMPTS - 1)
 
     def test_a_damaged_database_is_reported(self):
         places = self.root / "places.sqlite"
@@ -382,6 +406,115 @@ class DetectedBrowsersTest(BookmarksTestCase):
         )
 
 
+class FaviconsTest(BookmarksTestCase):
+    def test_chromium_picks_the_row_size_and_falls_back_to_the_site(self):
+        path = self.root / "Favicons"
+        write_chromium_favicons(
+            path,
+            ("https://a.example/page", PNG + b"16", 16),
+            ("https://a.example/page", PNG + b"32", 32),
+            ("https://a.example/other", PNG + b"other", 32),
+            ("https://unwanted.example/", PNG + b"unwanted", 32),
+        )
+        store = domain.IconStore(path, domain.IconFormat.CHROMIUM_FAVICONS)
+        wanted = {"https://a.example/page", "https://www.a.example/never-shown"}
+        icons = favicons.read_favicons(store, self.data_dir, wanted)
+        self.assertEqual(icons.for_url("https://a.example/page").data, PNG + b"32")
+        self.assertIsNotNone(icons.for_url("https://www.a.example/never-shown"))
+        self.assertNotIn("https://unwanted.example/", icons.pages)
+        self.assertNotIn("unwanted.example", icons.sites)
+        self.assertEqual(list(self.data_dir.iterdir()), [])  # The copy is gone.
+
+    def test_firefox_prefers_vector_icons_and_knows_site_icons(self):
+        path = self.root / "favicons.sqlite"
+        with closing(sqlite3.connect(path)) as database, database:
+            database.executescript(
+                """
+                CREATE TABLE moz_icons (id INTEGER PRIMARY KEY, icon_url TEXT, data BLOB,
+                    width INTEGER, root INTEGER);
+                CREATE TABLE moz_pages_w_icons (id INTEGER PRIMARY KEY, page_url TEXT);
+                CREATE TABLE moz_icons_to_pages (page_id INTEGER, icon_id INTEGER);
+                INSERT INTO moz_pages_w_icons VALUES (1, 'https://a.example/');
+                INSERT INTO moz_icons_to_pages VALUES (1, 1), (1, 2);
+                """
+            )
+            database.executemany(
+                "INSERT INTO moz_icons VALUES (?, ?, ?, ?, ?)",
+                [
+                    (1, "https://a.example/icon.png", PNG, 16, 0),
+                    (2, "https://a.example/icon.svg", b"<svg/>", 65535, 0),
+                    (3, "https://b.example/favicon.ico", ICO, 16, 1),
+                ],
+            )
+        store = domain.IconStore(path, domain.IconFormat.FIREFOX_FAVICONS)
+        wanted = {"https://a.example/", "https://b.example/x"}
+        icons = favicons.read_favicons(store, self.data_dir, wanted)
+        self.assertEqual(icons.for_url("https://a.example/").data, b"<svg/>")
+        self.assertEqual(icons.for_url("https://b.example/x").data, ICO)
+
+    def test_a_damaged_cache_is_reported(self):
+        path = self.root / "Favicons"
+        path.write_bytes(b"not a database" * 100)
+        store = domain.IconStore(path, domain.IconFormat.CHROMIUM_FAVICONS)
+        with self.assertRaises(domain.BookmarkError):
+            favicons.read_favicons(store, self.data_dir, {"https://a.example/"})
+
+    def test_profiles_name_their_icon_cache(self):
+        data = self.root / "User Data"
+        write_chromium_bookmarks(data / "Default" / "Bookmarks", ("A", "https://a.example"))
+        write_chromium_favicons(data / "Default" / "Favicons")
+        source = discovery.chromium_sources(data, "Chrome", "chrome")[0]
+        self.assertEqual(source.icons.format, domain.IconFormat.CHROMIUM_FAVICONS)
+        write_places(self.root / "ff" / "places.sqlite")
+        (self.root / "ff" / "favicons.sqlite").write_bytes(b"")
+        custom = discovery.custom_sources(str(self.root / "ff")).sources[0]
+        self.assertEqual(custom.icons.format, domain.IconFormat.FIREFOX_FAVICONS)
+
+
+class IconFilesTest(BookmarksTestCase):
+    def test_recognizes_the_formats_winlauncher_draws(self):
+        cases = {
+            PNG: ".png",
+            ICO: ".ico",
+            b"GIF89a...": ".gif",
+            b"\xff\xd8\xff\xe0": ".jpg",
+            b"RIFF\x00\x00\x00\x00WEBPVP8 ": ".webp",
+            b"\xef\xbb\xbf  <svg xmlns='x'/>": ".svg",
+            b'<?xml version="1.0"?>\n<SVG/>': ".svg",
+            b"<html>": None,
+            b"BM": None,
+        }
+        for data, suffix in cases.items():
+            with self.subTest(data=data):
+                self.assertEqual(icon_files.image_suffix(data), suffix)
+
+    def test_equal_icons_share_a_file_and_unused_ones_are_removed(self):
+        files = icon_files.IconFiles(self.data_dir)
+        first = files.path_for(domain.IconImage(PNG + b"a", 16))
+        self.assertEqual(files.path_for(domain.IconImage(PNG + b"a", 32)), first)
+        self.assertEqual(files.path_for(domain.IconImage(b"<html>", 16)), "")
+        self.assertEqual(files.path_for(None), "")
+        stale = Path(first).with_name("stale.png")
+        stale.write_bytes(PNG)
+        files.remove_unused()
+        self.assertEqual(list(Path(first).parent.iterdir()), [Path(first)])
+
+
+class AddressTest(unittest.TestCase):
+    def test_the_short_address_shows_the_site_and_the_first_part_of_the_path(self):
+        cases = {
+            "https://www.github.com/bjspi/WinLauncher/issues": "github.com/bjspi/…",
+            "https://github.com/bjspi": "github.com/bjspi",
+            "https://github.com/bjspi/": "github.com/bjspi",
+            "https://example.com/?q=1": "example.com",
+            "https://example.com": "example.com",
+            "http://[": "",
+        }
+        for url, shown in cases.items():
+            with self.subTest(url=url):
+                self.assertEqual(domain.Bookmark("", url).short_address, shown)
+
+
 class VisibilityTest(unittest.TestCase):
     def test_exclusions_match_title_address_and_folders_ignoring_case(self):
         bookmark = domain.Bookmark("Bank Login", "https://bank.example/in", ("Private", "Money"))
@@ -433,6 +566,29 @@ class RefreshTest(BookmarksTestCase):
         self.assertEqual(item.name, "https://www.a.example/x")  # It has no title.
         self.assertEqual(item.keywords, ("a.example", "Bookmarks bar", "Work"))
         self.assertEqual(item.breadcrumbs, ("Chrome", "Personal", "Bookmarks bar", "Work"))
+        self.assertEqual([chip.text for chip in item.chips], ["a.example/x"])
+        self.assertEqual(item.icon, "")  # The profile has no icon cache.
+
+    def with_icons(self, source, icons: Path):
+        store = domain.IconStore(icons, domain.IconFormat.CHROMIUM_FAVICONS)
+        return domain.ProfileSource(
+            source.key, source.browser, source.profile, source.stores, store
+        )
+
+    def test_items_show_the_icon_the_browser_cached(self):
+        source = self.source()
+        icons = source.stores[0].path.with_name("Favicons")
+        write_chromium_favicons(icons, ("https://www.a.example/x", PNG + b"page", 16))
+        item = self.refreshed(self.with_icons(source, icons))[0]
+        self.assertEqual(Path(item.icon).read_bytes(), PNG + b"page")
+        self.assertEqual(Path(item.icon).parent, self.data_dir / icon_files.ICONS_FOLDER)
+
+    def test_an_unreadable_icon_cache_still_lists_the_bookmarks(self):
+        source = self.source()
+        icons = source.stores[0].path.with_name("Favicons")
+        icons.write_bytes(b"not a database" * 100)
+        items = self.refreshed(self.with_icons(source, icons))
+        self.assertEqual([item.icon for item in items], [""])
 
     def test_a_profile_is_read_only_once_chosen(self):
         source = self.source()

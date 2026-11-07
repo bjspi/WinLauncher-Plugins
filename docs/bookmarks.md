@@ -4,6 +4,9 @@ Searches the bookmarks of Chrome, Edge, Brave and Firefox. Type `bm github` or
 `bookmarks github`; the keyword alone lists the most recently used ones. A bookmark
 opens in your default browser, whichever browser it was saved in.
 
+Each row shows the site's icon, a chip with where the link leads, such as
+`github.com/bjspi/…`, and where the bookmark is saved: browser, profile and folders.
+
 ## Choose your profiles first
 
 Nothing is listed until you choose it: turn on the profiles you want under Settings →
@@ -38,10 +41,20 @@ once under Settings → Plugins → Bookmarks. The keywords keep working.
 A browser counts as present when it left a profile with bookmarks in these folders,
 so a browser you uninstalled may still offer its profile.
 
+## Icons
+
+The icons come from the cache each browser keeps of the sites it showed: `Favicons`
+in a Chromium profile, `favicons.sqlite` in a Firefox profile. No site is contacted.
+A bookmark the browser holds no icon for gets the icon of another page of the same
+site, else the plugin's own. The caches are read through a private copy, like
+Firefox's bookmarks, and only the icons of your bookmarks are kept, as image files in
+the plugin's data folder; icons no bookmark uses any more are deleted. A cache that
+cannot be read leaves the bookmarks listed without icons.
+
 ## Settings
 
-- **Bookmarks:** the most to list, at most 5,000, most recently used first. The same address saved
-  in several browsers or profiles is one row.
+- **Bookmarks:** the most to list, at most 5,000, most recently used first. The same
+  address saved in several browsers or profiles is one row.
 - **Excluded bookmarks:** one [fnmatch](https://docs.python.org/3/library/fnmatch.html)
   pattern per line, ignoring case: `*`, `?`, `[abc]` and `[!abc]`. A line hides a
   bookmark when it fits the whole title, the whole address or the whole name of a
@@ -64,7 +77,7 @@ so a browser you uninstalled may still offer its profile.
 - **One switch per profile:** all are off at first. The switches list what was found
   when WinLauncher started; a newer profile gets its switch at the next start.
 
-**Show sources** lists what was recognized, how many bookmarks each source holds and
+**Show sources** lists what was recognized, how many bookmarks and icons each source holds and
 what could not be read.
 
 ## Limits

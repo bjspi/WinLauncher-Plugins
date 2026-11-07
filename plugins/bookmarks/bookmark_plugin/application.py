@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from winlauncher.plugins.api import (
+    Chip,
     Plugin,
     PluginCommand,
     PluginContext,
@@ -18,6 +19,7 @@ from winlauncher.plugins.api import (
 from .catalog import ProfileBookmarks, read_sources
 from .discovery import custom_sources, detected_sources
 from .domain import Bookmark, ProfileSource, parse_patterns, visible_bookmarks
+from .icon_files import IconFiles
 
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
 LIMIT_OPTION = "limit"
@@ -92,7 +94,12 @@ class BookmarksPlugin(Plugin):
         found = [bookmark for result in results for bookmark in result.bookmarks]
         patterns = parse_patterns(str(context.options[EXCLUDED_OPTION]))
         visible = visible_bookmarks(found, patterns, int(context.options[LIMIT_OPTION]))
-        return [bookmark_item(bookmark) for bookmark in visible]
+        icon_files = IconFiles(context.data_dir)
+        items = [
+            bookmark_item(bookmark, icon_files.path_for(bookmark.icon)) for bookmark in visible
+        ]
+        icon_files.remove_unused()
+        return items
 
     def commands(self) -> tuple[PluginCommand, ...]:
         return (PluginCommand("Show sources", show_sources),)
@@ -115,18 +122,27 @@ def _report_problems(
     problems = [*custom_problems, *(p for result in results for p in result.problems)]
     for problem in problems:
         context.log.warning("%s", problem)
+    for result in results:
+        if result.icon_problem:
+            context.log.info("%s", result.icon_problem)
     if problems and not any(result.any_read for result in results):
         raise PluginError(" ".join(problems[:SHOWN_PROBLEMS]))
 
 
-def bookmark_item(bookmark: Bookmark) -> PluginItem:
-    """Found by title, site and folders; the address itself identifies it across browsers."""
+def bookmark_item(bookmark: Bookmark, icon: str = "") -> PluginItem:
+    """Found by title, site and folders; the address itself identifies it across browsers.
+
+    The row shows where the link leads as a chip, and where it is saved as breadcrumbs.
+    """
+    address = bookmark.short_address
     return PluginItem(
         key=bookmark.url,
         name=bookmark.shown_title,
         target=bookmark.url,
         keywords=tuple(word for word in (bookmark.host, *bookmark.folders) if word),
+        icon=icon,
         breadcrumbs=(bookmark.browser, bookmark.profile, *bookmark.folders),
+        chips=(Chip(address),) if address else (),
     )
 
 
@@ -147,4 +163,6 @@ def show_sources(context: PluginContext) -> str:
 def _result_line(result: ProfileBookmarks) -> str:
     if result.problems:
         return "; ".join(result.problems)
-    return f"{result.source.description}: {len(result.bookmarks)} bookmarks"
+    with_icons = sum(1 for bookmark in result.bookmarks if bookmark.icon is not None)
+    line = f"{result.source.description}: {len(result.bookmarks)} bookmarks, {with_icons} icons"
+    return f"{line} ({result.icon_problem})" if result.icon_problem else line

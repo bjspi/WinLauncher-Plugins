@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from fnmatch import fnmatchcase
 from pathlib import Path
@@ -13,6 +13,8 @@ from urllib.parse import urlsplit
 # program a file: address names, even on a network share. Bookmarklets and browser pages
 # such as javascript:, place: or chrome: cannot be opened from outside a browser anyway.
 OPENABLE_SCHEMES = frozenset({"http", "https", "ftp"})
+WWW_PREFIX = "www."
+ELLIPSIS = "…"
 
 
 class BookmarkError(Exception):
@@ -33,6 +35,27 @@ class BookmarkStore:
     format: StoreFormat
 
 
+class IconFormat(StrEnum):
+    CHROMIUM_FAVICONS = "chromium-favicons"
+    FIREFOX_FAVICONS = "firefox-favicons"
+
+
+@dataclass(frozen=True, slots=True)
+class IconStore:
+    """The database in which a browser caches the icons of the sites it showed."""
+
+    path: Path
+    format: IconFormat
+
+
+@dataclass(frozen=True, slots=True)
+class IconImage:
+    """A site's icon as the browser cached it: an image file's bytes."""
+
+    data: bytes = field(repr=False)
+    width: int  # In pixels; Firefox stores an SVG icon with a width of its own.
+
+
 @dataclass(frozen=True, slots=True)
 class ProfileSource:
     """A browser profile, or a path the user named, and the stores it reads."""
@@ -41,6 +64,7 @@ class ProfileSource:
     browser: str
     profile: str
     stores: tuple[BookmarkStore, ...]
+    icons: IconStore | None = None
 
     @property
     def description(self) -> str:
@@ -55,6 +79,7 @@ class Bookmark:
     recency: float = 0.0  # Seconds since 1970: last visit or, without one, when it was added.
     browser: str = ""
     profile: str = ""
+    icon: IconImage | None = None
 
     @property
     def shown_title(self) -> str:
@@ -62,11 +87,28 @@ class Bookmark:
 
     @property
     def host(self) -> str:
-        """The site without its `www.`, by which a bookmark is found too."""
+        """The site, by which a bookmark is found too."""
+        return site_of(self.url)
+
+    @property
+    def short_address(self) -> str:
+        """Where it leads, at a glance: the site and the first part of the path."""
         try:
-            return (urlsplit(self.url).hostname or "").removeprefix("www.")
+            path = urlsplit(self.url).path
         except ValueError:
-            return ""
+            return self.host
+        first, _, rest = path.strip("/").partition("/")
+        if not first:
+            return self.host
+        return f"{self.host}/{first}/{ELLIPSIS}" if rest else f"{self.host}/{first}"
+
+
+def site_of(url: str) -> str:
+    """The host of an address without its `www.`; empty for one that names none."""
+    try:
+        return (urlsplit(url).hostname or "").removeprefix(WWW_PREFIX)
+    except ValueError:
+        return ""
 
 
 def tidy(text: object) -> str:

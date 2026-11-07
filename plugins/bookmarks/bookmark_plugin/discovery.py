@@ -8,7 +8,15 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from .domain import BookmarkError, BookmarkStore, ProfileSource, StoreFormat, tidy
+from .domain import (
+    BookmarkError,
+    BookmarkStore,
+    IconFormat,
+    IconStore,
+    ProfileSource,
+    StoreFormat,
+    tidy,
+)
 
 CHROME_DATA = Path("Google", "Chrome", "User Data")
 EDGE_DATA = Path("Microsoft", "Edge", "User Data")
@@ -24,6 +32,9 @@ NUMBERED_PROFILES = "Profile *"
 # account in the second; a signed-in Chrome may have only the second one. The
 # Encrypted* files beside them hold the same bookmarks and cannot be read.
 CHROMIUM_FILES = ("Bookmarks", "AccountBookmarks")
+
+CHROMIUM_ICONS = "Favicons"
+FIREFOX_ICONS = "favicons.sqlite"
 
 PROFILES_INI = "profiles.ini"
 PROFILES_FOLDER = "Profiles"
@@ -90,7 +101,8 @@ def chromium_sources(user_data: Path, browser: str, key_prefix: str) -> list[Pro
         stores = _chromium_stores(user_data / folder)
         if stores:
             name = tidy(names.get(folder)) or folder
-            sources.append(ProfileSource(f"{key_prefix}:{folder}", browser, name, stores))
+            icons = _chromium_icons(user_data / folder)
+            sources.append(ProfileSource(f"{key_prefix}:{folder}", browser, name, stores, icons))
     return sources
 
 
@@ -137,9 +149,11 @@ def _file_source(path: Path) -> ProfileSource:
         return ProfileSource(key, CUSTOM_HTML, _folder_label(path), (store,))
     if suffix == SQLITE_SUFFIX:
         store = BookmarkStore(path, StoreFormat.FIREFOX_PLACES)
-        return ProfileSource(key, CUSTOM_FIREFOX, _folder_label(path.parent), (store,))
+        icons = _firefox_icons(path.parent)
+        return ProfileSource(key, CUSTOM_FIREFOX, _folder_label(path.parent), (store,), icons)
     store = BookmarkStore(path, StoreFormat.CHROMIUM_JSON)
-    return ProfileSource(key, CUSTOM_CHROMIUM, _folder_label(path.parent), (store,))
+    icons = _chromium_icons(path.parent)
+    return ProfileSource(key, CUSTOM_CHROMIUM, _folder_label(path.parent), (store,), icons)
 
 
 def _folder_sources(path: Path) -> list[ProfileSource]:
@@ -148,7 +162,9 @@ def _folder_sources(path: Path) -> list[ProfileSource]:
         return [_firefox_source(path, key, CUSTOM_FIREFOX, _folder_label(path))]
     stores = _chromium_stores(path)
     if stores:
-        return [ProfileSource(key, CUSTOM_CHROMIUM, _folder_label(path), stores)]
+        return [
+            ProfileSource(key, CUSTOM_CHROMIUM, _folder_label(path), stores, _chromium_icons(path))
+        ]
     if os.path.isfile(path / LOCAL_STATE):
         return chromium_sources(path, CUSTOM_CHROMIUM, key)
     if os.path.isfile(path / PROFILES_INI):
@@ -163,7 +179,19 @@ def _folder_label(path: Path) -> str:
 
 def _firefox_source(folder: Path, key: str, browser: str, name: str) -> ProfileSource:
     store = BookmarkStore(folder / PLACES, StoreFormat.FIREFOX_PLACES)
-    return ProfileSource(key, browser, name, (store,))
+    return ProfileSource(key, browser, name, (store,), _firefox_icons(folder))
+
+
+def _chromium_icons(profile: Path) -> IconStore | None:
+    return _icon_store(profile / CHROMIUM_ICONS, IconFormat.CHROMIUM_FAVICONS)
+
+
+def _firefox_icons(profile: Path) -> IconStore | None:
+    return _icon_store(profile / FIREFOX_ICONS, IconFormat.FIREFOX_FAVICONS)
+
+
+def _icon_store(path: Path, icon_format: IconFormat) -> IconStore | None:
+    return IconStore(path, icon_format) if os.path.isfile(path) else None
 
 
 def _chromium_stores(profile: Path) -> tuple[BookmarkStore, ...]:
