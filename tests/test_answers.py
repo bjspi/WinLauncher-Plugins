@@ -192,7 +192,7 @@ class PluginTest(unittest.TestCase):
     def test_the_host_loads_the_plugin_as_one_that_answers(self):
         self.assertEqual(FOUND.problems, [])
         self.assertTrue(PLUGIN.answers())
-        self.assertEqual(FOUND.sources["answers"].version, "1.0.0")
+        self.assertEqual(FOUND.sources["answers"].version, "1.1.0")
         self.assertTrue(Path(PLUGIN.icon).is_file())
 
     def test_each_kind_answers_unless_switched_off(self):
@@ -241,6 +241,16 @@ class PluginTest(unittest.TestCase):
         for text in ("100usdineur", "5kminmi"):  # Words need their spaces.
             with self.subTest(text=text):
                 self.assertIsNone(self.plugin.answer(text, self.context()))
+
+    def test_the_help_shows_examples_of_the_kinds_switched_on_and_they_answer(self):
+        self.plugin.rates = RATES
+        tips = self.plugin.tips(self.context())
+        self.assertEqual(len(tips), sum(len(kind) for kind in application.TIPS.values()))
+        for tip in tips:
+            with self.subTest(example=tip.example):
+                self.assertIsNotNone(self.plugin.answer(tip.example, self.context()))
+        only_units = self.context(currencies=False, dates=False, times=False)
+        self.assertEqual([tip.example for tip in self.plugin.tips(only_units)], ["5 km in mi"])
 
     def test_offline_keeps_the_rates_it_had(self):
         write_rates(self.folder, RATES)

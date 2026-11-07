@@ -1,4 +1,4 @@
-version = "1.0.0"
+version = "1.1.0"
 name = "Answers"
 description = "Converts units and currencies, counts dates and tells the time elsewhere, right above the results: 5 km in mi, 100 usd in eur, heute + 3 wochen, zeit in bangalore. Needs WinLauncher 0.17."
 icon = "assets/answers.svg"

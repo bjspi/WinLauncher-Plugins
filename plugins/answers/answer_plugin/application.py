@@ -12,7 +12,14 @@ from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
-from winlauncher.plugins.api import Answer, Plugin, PluginContext, PluginItem, PluginOption
+from winlauncher.plugins.api import (
+    Answer,
+    Plugin,
+    PluginContext,
+    PluginItem,
+    PluginOption,
+    PluginTip,
+)
 
 from .currency import (
     RATES_FILE,
@@ -33,6 +40,26 @@ CURRENCIES_OPTION = "currencies"
 DATES_OPTION = "dates"
 TIMES_OPTION = "times"
 RATES_MAX_AGE_S = 12 * 60 * 60  # The ECB publishes once per working day.
+# What `?` shows for each kind, by option; choosing a row types its example.
+TIPS = {
+    UNITS_OPTION: (
+        PluginTip("5 km in mi", "Units, in German or English; also 100 °F in C, 1,5 GB in MB"),
+    ),
+    CURRENCIES_OPTION: (
+        PluginTip("100 usd in eur", "Currencies at the ECB's rate of the day; also 50 € nach $"),
+    ),
+    DATES_OPTION: (
+        PluginTip("heute + 3 wochen", "Date arithmetic; also today + 1 month"),
+        PluginTip("tage bis 24.12.", "Days until or since a date; also days until 2026-12-24"),
+        PluginTip("kw", "This calendar week; kw 45 or week 45 2027 for another"),
+    ),
+    TIMES_OPTION: (
+        PluginTip("zeit in bangalore", "The time elsewhere; also tokyo time, time in utc+5:30"),
+        PluginTip(
+            "15:00 berlin in new york", "A time of day in another place; also 3pm pst to cet"
+        ),
+    ),
+}
 
 
 class AnswersPlugin(Plugin):
@@ -72,6 +99,12 @@ class AnswersPlugin(Plugin):
         if context.options[TIMES_OPTION]:
             self.places.load()
         return []
+
+    def tips(self, context: PluginContext) -> tuple[PluginTip, ...]:
+        """Examples of what the switched-on kinds understand, for the `?` help."""
+        return tuple(
+            tip for option, tips in TIPS.items() if context.options[option] for tip in tips
+        )
 
     def answer(self, text: str, context: PluginContext) -> Answer | None:
         reply = self._reply(text, context)

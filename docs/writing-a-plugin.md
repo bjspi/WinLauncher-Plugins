@@ -133,6 +133,14 @@ worker like a command, may show the same dialogs and returns a message or `None`
 GUI thread while the menu opens: look only at `item`, never at files or the network.
 
 ```python
+def tips(self, context: PluginContext) -> tuple[PluginTip, ...]:
+```
+Rows for WinLauncher's `?` help, such as the questions your `answer` understands:
+`PluginTip(example, meaning, insert="")`. Choosing a row types `insert`, or the
+example itself, so an example should work as typed. `? word` finds rows by their
+example and meaning; the meaning is shown after your label.
+
+```python
 def exclude(self, item: PluginItem, context: PluginContext) -> bool:
 ```
 Define it, and every item's menu offers **Exclude…**. You decide what is left out,

@@ -25,6 +25,9 @@ currencies or places are known. `zeit tracking`, `5 km run` or a bare date stay
 ordinary searches. Arithmetic, such as `200 + 10%`, is WinLauncher's own and needs
 no plugin.
 
+Type `?` in WinLauncher (0.18.1 or newer) to see examples of what is switched on;
+`? zeit` or `? answer` narrows them down, and Enter types the example.
+
 ## Settings
 
 Settings → Plugins → Answers has one switch per kind, all on: **Units**,
