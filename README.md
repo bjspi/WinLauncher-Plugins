@@ -34,6 +34,7 @@ annual-report.pdf             D:\Documents\2026
 | --- | --- | --- |
 | <img src="plugins/telegram/assets/telegram.svg" width="16"> [**Telegram**](#-telegram) | Your recent Telegram chats, opened in Telegram Desktop | `tg` |
 | <img src="plugins/ai_sessions/assets/sessions.svg" width="16"> [**AI Sessions**](docs/ai-sessions.md) | Codex, Claude Code and Copilot CLI sessions, resumed in a terminal | `ai`, `sessions`, `codex`, `claude`, `copilot` |
+| <img src="plugins/bookmarks/assets/bookmarks.svg" width="16"> [**Bookmarks**](docs/bookmarks.md) | The bookmarks of Chrome, Edge, Brave and Firefox, also from portable profiles | `bm`, `bookmarks` |
 | 📐 [`_template`](plugins/_template) | Not a plugin: the skeleton to copy for a new one | — |
 
 ## ✨ How it feels

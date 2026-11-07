@@ -1,0 +1,5 @@
+version = "1.0.0"
+name = "Bookmarks"
+description = "Search the bookmarks of Chrome, Edge, Brave and Firefox, including portable profiles and exported HTML files."
+icon = "assets/bookmarks.svg"
+requires = []
