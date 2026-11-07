@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from winlauncher.plugins.api import (
     Chip,
+    Choice,
     Plugin,
     PluginCommand,
     PluginContext,
@@ -18,7 +20,15 @@ from winlauncher.plugins.api import (
 
 from .catalog import ProfileBookmarks, read_sources
 from .discovery import custom_sources, detected_sources
-from .domain import Bookmark, ProfileSource, parse_patterns, visible_bookmarks
+from .domain import (
+    Bookmark,
+    BookmarkError,
+    Exclusions,
+    ProfileSource,
+    parse_patterns,
+    visible_bookmarks,
+)
+from .exclusions import read_exclusions, write_exclusions
 from .icon_files import IconFiles
 
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
@@ -29,6 +39,10 @@ PROFILE_OPTION_PREFIX = "profile:"
 PROFILE_CHOSEN_BY_DEFAULT = False
 MAX_LIMIT = 5000  # WinLauncher keeps no more items of one plugin.
 SHOWN_PROBLEMS = 3
+PROFILE_PARTS = 2  # Browser and profile, the first parts of a bookmark's location.
+LOCATION_SEPARATOR = " › "
+BOOKMARK_CHOICE = "bookmark"  # Exclude…'s row for the bookmark itself.
+FOLDER_CHOICE_PREFIX = "folder:"  # Followed by the number of folder parts.
 
 
 def _profile_option(source: ProfileSource) -> str:
@@ -93,7 +107,10 @@ class BookmarksPlugin(Plugin):
         _report_problems(custom.problems, results, context)
         found = [bookmark for result in results for bookmark in result.bookmarks]
         patterns = parse_patterns(str(context.options[EXCLUDED_OPTION]))
-        visible = visible_bookmarks(found, patterns, int(context.options[LIMIT_OPTION]))
+        with _user_facing_errors():
+            excluded = read_exclusions(context.data_dir)
+        limit = int(context.options[LIMIT_OPTION])
+        visible = visible_bookmarks(found, patterns, limit, excluded)
         icon_files = IconFiles(context.data_dir)
         items = [
             bookmark_item(bookmark, icon_files.path_for(bookmark.icon)) for bookmark in visible
@@ -102,7 +119,89 @@ class BookmarksPlugin(Plugin):
         return items
 
     def commands(self) -> tuple[PluginCommand, ...]:
-        return (PluginCommand("Show sources", show_sources),)
+        return (
+            PluginCommand("Show sources", show_sources),
+            PluginCommand("Excluded bookmarks…", restore_bookmarks),
+        )
+
+    def exclude(self, item: PluginItem, context: PluginContext) -> bool:
+        """This bookmark, or the folder it lies in, or a folder above that one."""
+        location = item.breadcrumbs
+        choices = [
+            Choice(BOOKMARK_CHOICE, "Only this bookmark", item.name, checked=True),
+            *(
+                Choice(
+                    f"{FOLDER_CHOICE_PREFIX}{parts}",
+                    "Folder",
+                    LOCATION_SEPARATOR.join(location[:parts]),
+                )
+                for parts in range(len(location), PROFILE_PARTS, -1)
+            ),
+        ]
+        ticked = context.choose(
+            "Exclude",
+            "Ticked ones are left out of the search, folders with everything below them. "
+            "Excluded bookmarks… brings them back; the browser keeps them.",
+            choices,
+        )
+        if not ticked:
+            return False
+        with _user_facing_errors():
+            excluded = read_exclusions(context.data_dir)
+            addresses = dict(excluded.addresses)
+            if BOOKMARK_CHOICE in ticked:
+                addresses[item.key] = item.name
+            folders = [
+                location[: int(key.removeprefix(FOLDER_CHOICE_PREFIX))]
+                for key in ticked
+                if key.startswith(FOLDER_CHOICE_PREFIX)
+            ]
+            unique = tuple(dict.fromkeys((*excluded.folders, *folders)))
+            write_exclusions(context.data_dir, Exclusions(addresses, unique))
+        return True
+
+
+@contextmanager
+def _user_facing_errors() -> Iterator[None]:
+    """Report a damaged or unwritable exclusion file to the user, not as a crash."""
+    try:
+        yield
+    except BookmarkError as exc:
+        raise PluginError(str(exc)) from exc
+
+
+def restore_bookmarks(context: PluginContext) -> str | None:
+    """Untick exclusions to list those bookmarks again."""
+    with _user_facing_errors():
+        excluded = read_exclusions(context.data_dir)
+    rows = {
+        **{f"address:{url}": (title, url) for url, title in excluded.addresses.items()},
+        **{
+            f"folder:{LOCATION_SEPARATOR.join(folder)}": ("Folder", LOCATION_SEPARATOR.join(folder))
+            for folder in excluded.folders
+        },
+    }
+    if not rows:
+        return "No bookmark is excluded. Right-click a bookmark in the results to exclude it."
+    ticked = context.choose(
+        "Excluded bookmarks",
+        "Ticked ones stay excluded; untick them to list them again.",
+        [Choice(key, label, detail, checked=True) for key, (label, detail) in rows.items()],
+    )
+    if ticked is None:
+        return None
+    kept = Exclusions(
+        {url: title for url, title in excluded.addresses.items() if f"address:{url}" in ticked},
+        tuple(
+            folder
+            for folder in excluded.folders
+            if f"folder:{LOCATION_SEPARATOR.join(folder)}" in ticked
+        ),
+    )
+    with _user_facing_errors():
+        write_exclusions(context.data_dir, kept)
+    restored = len(rows) - len(ticked & rows.keys())
+    return f"{restored} restored. They appear after the next refresh." if restored else None
 
 
 def _enabled_sources(
@@ -141,7 +240,7 @@ def bookmark_item(bookmark: Bookmark, icon: str = "") -> PluginItem:
         target=bookmark.url,
         keywords=tuple(word for word in (bookmark.host, *bookmark.folders) if word),
         icon=icon,
-        breadcrumbs=(bookmark.browser, bookmark.profile, *bookmark.folders),
+        breadcrumbs=bookmark.location,
         chips=(Chip(address),) if address else (),
     )
 

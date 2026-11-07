@@ -12,6 +12,7 @@ import tempfile
 import threading
 import unittest
 from contextlib import closing
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -32,6 +33,7 @@ favicons = importlib.import_module(package_name + ".readers.favicons")
 snapshot = importlib.import_module(package_name + ".readers.snapshot")
 icon_files = importlib.import_module(package_name + ".icon_files")
 html_export = importlib.import_module(package_name + ".readers.html_export")
+exclusions = importlib.import_module(package_name + ".exclusions")
 
 # 2021-01-01 00:00:00 UTC in Chromium's microseconds since 1601 and in seconds since 1970.
 CHROMIUM_2021 = "13253932800000000"
@@ -606,6 +608,71 @@ class RefreshTest(BookmarksTestCase):
 
     def test_excluded_bookmarks_are_not_listed(self):
         self.assertEqual(self.refreshed(self.source(), excluded="work"), [])
+
+    def choose_with(self, ticked: set[str] | None):
+        """A context whose checklist ticks `ticked`, recording the rows it showed."""
+        shown = []
+
+        def choose(title, text, choices):
+            shown.extend(choices)
+            return None if ticked is None else frozenset(ticked)
+
+        return replace(self.context(), choose=choose), shown
+
+    def test_exclude_offers_the_bookmark_and_its_folders(self):
+        source = self.source()
+        (item,) = self.refreshed(source)
+        context, shown = self.choose_with(None)
+        self.assertFalse(PLUGIN.exclude(item, context))
+        self.assertEqual(
+            [(row.key, row.detail, row.checked) for row in shown],
+            [
+                ("bookmark", item.name, True),
+                ("folder:4", "Chrome › Personal › Bookmarks bar › Work", False),
+                ("folder:3", "Chrome › Personal › Bookmarks bar", False),
+            ],
+        )
+        self.assertEqual(exclusions.read_exclusions(self.data_dir), domain.Exclusions())
+
+    def test_an_excluded_folder_hides_what_lies_below_it_until_restored(self):
+        source = self.source()
+        (item,) = self.refreshed(source)
+        context, _shown = self.choose_with({"folder:3"})
+        self.assertTrue(PLUGIN.exclude(item, context))
+        self.assertEqual(self.refreshed(source), [])
+        context, shown = self.choose_with(set())
+        self.assertIn("1 restored", application.restore_bookmarks(context))
+        self.assertEqual([row.detail for row in shown], ["Chrome › Personal › Bookmarks bar"])
+        self.assertEqual(len(self.refreshed(source)), 1)
+
+    def test_an_excluded_bookmark_is_hidden_in_every_browser(self):
+        (item,) = self.refreshed(self.source())
+        context, _shown = self.choose_with({"bookmark"})
+        self.assertTrue(PLUGIN.exclude(item, context))
+        self.assertEqual(self.refreshed(self.source("edge:Default")), [])
+        saved = exclusions.read_exclusions(self.data_dir)
+        self.assertEqual(dict(saved.addresses), {item.key: item.name})
+
+    def test_a_folder_of_the_same_name_elsewhere_stays_listed(self):
+        excluded = domain.Exclusions(folders=(("Chrome", "Personal", "Work"),))
+        here = domain.Bookmark("A", "https://a.example", ("Work", "Old"), 0, "Chrome", "Personal")
+        elsewhere = domain.Bookmark(
+            "B", "https://b.example", ("Bar", "Work"), 0, "Chrome", "Personal"
+        )
+        other = domain.Bookmark("C", "https://c.example", ("Work",), 0, "Edge", "Personal")
+        self.assertEqual(
+            [excluded.hides(b) for b in (here, elsewhere, other)],
+            [True, False, False],
+        )
+
+    def test_a_damaged_exclusion_file_fails_the_refresh(self):
+        (self.data_dir / exclusions.EXCLUSIONS_FILE).write_text('{"addresses": 1}', "utf-8")
+        with self.assertRaisesRegex(PluginError, "damaged"):
+            self.refreshed(self.source())
+
+    def test_restoring_nothing_says_how_to_exclude(self):
+        context, _shown = self.choose_with(None)
+        self.assertIn("Right-click", application.restore_bookmarks(context))
 
     def test_one_broken_path_does_not_hide_the_others(self):
         items = self.refreshed(self.source(), custom_paths=str(self.root / "missing"))

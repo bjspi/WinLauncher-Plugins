@@ -1,4 +1,4 @@
-version = "1.1.0"
+version = "1.2.0"
 name = "Bookmarks"
 description = "Search the bookmarks of Chrome, Edge, Brave and Firefox, with site icons, including portable profiles and exported HTML files."
 icon = "assets/bookmarks.svg"

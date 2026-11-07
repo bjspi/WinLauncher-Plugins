@@ -80,6 +80,20 @@ cannot be read leaves the bookmarks listed without icons.
 **Show sources** lists what was recognized, how many bookmarks and icons each source holds and
 what could not be read.
 
+## Excluding bookmarks and folders
+
+**Right-click a bookmark → Exclude…** (WinLauncher 0.17 or newer) offers *Only this
+bookmark*, ticked, and every folder it lies in, such as *Chrome › Personal ›
+Bookmarks bar › Work*. A folder is excluded with everything below it, also
+bookmarks saved there later, but only in that browser profile: a folder of the same
+name elsewhere stays listed. An excluded bookmark is hidden in every browser, as its
+address is one row anyway.
+
+**Excluded bookmarks…** on the settings card lists the exclusions, ticked; untick
+one to list it again. They are kept in `excluded-bookmarks.json` in the plugin's
+data folder; the browser's bookmarks are never changed. The patterns of
+**Excluded bookmarks** in the settings work as before, beside them.
+
 ## Limits
 
 Only `http`, `https` and `ftp` addresses are listed. Bookmarklets and browser pages

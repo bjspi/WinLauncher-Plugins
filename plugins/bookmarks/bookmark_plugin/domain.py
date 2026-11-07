@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from fnmatch import fnmatchcase
@@ -86,6 +86,11 @@ class Bookmark:
         return self.title or self.url
 
     @property
+    def location(self) -> tuple[str, ...]:
+        """Where it is saved: browser, profile, then its folders, outermost first."""
+        return (self.browser, self.profile, *self.folders)
+
+    @property
     def host(self) -> str:
         """The site, by which a bookmark is found too."""
         return site_of(self.url)
@@ -140,11 +145,34 @@ def is_excluded(bookmark: Bookmark, patterns: tuple[str, ...]) -> bool:
     return any(fnmatchcase(name.casefold(), pattern) for name in names for pattern in patterns)
 
 
+@dataclass(frozen=True, slots=True)
+class Exclusions:
+    """What Exclude… left out: single addresses, and whole folders of one profile."""
+
+    addresses: Mapping[str, str] = field(default_factory=dict)  # Address to its title.
+    folders: tuple[tuple[str, ...], ...] = ()  # Locations, as `Bookmark.location`.
+
+    def hides(self, bookmark: Bookmark) -> bool:
+        """The bookmark itself, or one saved in an excluded folder or below it."""
+        if bookmark.url in self.addresses:
+            return True
+        location = bookmark.location
+        return any(location[: len(folder)] == folder for folder in self.folders)
+
+
 def visible_bookmarks(
-    found: Iterable[Bookmark], patterns: tuple[str, ...], limit: int
+    found: Iterable[Bookmark],
+    patterns: tuple[str, ...],
+    limit: int,
+    excluded: Exclusions | None = None,
 ) -> list[Bookmark]:
     """Most recently used first, one row per address, whichever browser it was saved in."""
-    wanted = (b for b in found if is_openable(b.url) and not is_excluded(b, patterns))
+    excluded = excluded or Exclusions()
+    wanted = (
+        b
+        for b in found
+        if is_openable(b.url) and not is_excluded(b, patterns) and not excluded.hides(b)
+    )
     by_recency = sorted(wanted, key=lambda bookmark: bookmark.recency, reverse=True)
     by_address: dict[str, Bookmark] = {}
     for bookmark in by_recency:
