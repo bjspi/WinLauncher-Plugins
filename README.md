@@ -155,8 +155,8 @@ begins with `_` are not loaded.
 ### Checks
 
 ```powershell
-python -m ruff check plugins tests
-python -m ruff format --check plugins tests
+python -m ruff check plugins tests tools
+python -m ruff format --check plugins tests tools
 $env:PYTHONPATH = "<path to your WinLauncher checkout>"; python -m unittest discover -s tests
 ```
 

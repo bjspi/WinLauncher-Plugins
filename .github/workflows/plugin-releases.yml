@@ -1,0 +1,38 @@
+name: Plugin releases
+
+# A plugin whose version in plugin.toml has no release yet gets one: tagged
+# <folder>-v<version>, with the commits that changed its folder as text. Installed
+# copies are offered the update by WinLauncher itself, from the version alone.
+
+on:
+  push:
+    branches: [main]
+    paths: ['plugins/*/plugin.toml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: plugin-releases
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Publish plugin releases
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0  # The notes read each plugin's commits since its previous tag.
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Publish a release for every new plugin version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python tools/plugin_releases.py

@@ -58,6 +58,11 @@ with a raised `version` is the release: installed copies are offered the update
 within 6 hours. A company or team source works the same way — a repository of its
 own, added under **Plugin sources**.
 
+Each new version also gets a GitHub release, tagged `<folder>-v<version>` such as
+`bookmarks-v1.1.0`. Its text lists every commit that changed the plugin's folder
+since its previous release, with subject and description, so write commit messages
+for users too. `tools/plugin_releases.py --dry-run` shows the text before you push.
+
 ## The entry points
 
 Everything WinLauncher calls is on your `Plugin` subclass. Only `id`, `label` and
@@ -228,6 +233,6 @@ reads files an older Windows editor saved as Windows-1252, and honors a
 - [ ] Every network call and subprocess has a timeout; `context.cancel` is honored.
 - [ ] Failures raise `PluginError`/`SetupRequired` with a message a user understands.
 - [ ] Nothing is written outside `context.data_dir`; no secret in `options`.
-- [ ] `python -m ruff check plugins tests` and `ruff format --check` pass.
+- [ ] `python -m ruff check plugins tests tools` and `ruff format --check` pass.
 - [ ] Tests cover link building and the conversion of foreign data, and contact no
       server.
