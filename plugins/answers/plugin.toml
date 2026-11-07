@@ -1,0 +1,6 @@
+version = "1.0.0"
+name = "Answers"
+description = "Converts units and currencies, counts dates and tells the time elsewhere, right above the results: 5 km in mi, 100 usd in eur, heute + 3 wochen, zeit in bangalore. Needs WinLauncher 0.17."
+icon = "assets/answers.svg"
+# Time zones for times elsewhere: Windows has no IANA database Python could read.
+requires = ["tzdata>=2024.1; sys_platform == 'win32'"]
