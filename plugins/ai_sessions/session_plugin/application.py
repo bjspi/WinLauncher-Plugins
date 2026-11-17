@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import os
 import time
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from datetime import date, datetime
 from pathlib import Path
 
+from winlauncher.plugins import api
 from winlauncher.plugins.api import (
     Chip,
     Choice,
@@ -55,6 +56,8 @@ ACTIVITY_DATE_FORMAT = "%Y-%m-%d"
 ACTIVITY_TIME_FORMAT = "%H:%M"
 NAMED_DAYS_AGO = {0: "Today", 1: "Yesterday"}
 FOLDERS_OFFERED = 3  # The project folder and two above it, for Exclude….
+# What the running WinLauncher offers plugins; empty before 0.22.2, which named none.
+HOST_FEATURES = frozenset(getattr(api, "FEATURES", ()))
 
 
 def _home_option(provider: Provider) -> str:
@@ -128,7 +131,7 @@ class AISessionsPlugin(Plugin):
             resume_session(ResumeTarget.from_data(item.data))
 
     def actions(self, item: PluginItem) -> tuple[PluginAction, ...]:
-        return (PluginAction("Open project folder", open_project_folder),)
+        return (menu_entry("Open project folder", open_project_folder, icon="folder"),)
 
     def exclude(self, item: PluginItem, context: PluginContext) -> bool:
         """This session, or every session of its project folder or a folder above it."""
@@ -175,6 +178,15 @@ def _user_facing_errors() -> Iterator[None]:
 def _exclusion_rules(excluded: Mapping[str, str], context: PluginContext) -> ExclusionRules:
     patterns = parse_name_patterns(str(context.options[EXCLUDED_NAMES_OPTION]))
     return ExclusionRules(excluded.keys(), patterns, excluded_folders(excluded))
+
+
+def menu_entry(
+    label: str, run: Callable[[PluginItem, PluginContext], str | None], icon: str
+) -> PluginAction:
+    """A menu entry, with its icon where the running WinLauncher shows one (0.22.2+)."""
+    if "action_icons" in HOST_FEATURES:
+        return PluginAction(label, run, icon=icon)
+    return PluginAction(label, run)
 
 
 def open_project_folder(item: PluginItem, context: PluginContext) -> None:

@@ -1,4 +1,4 @@
-version = "1.1.0"
+version = "1.2.0"
 name = "AI Sessions"
 description = "Find local Codex, Claude Code and GitHub Copilot CLI sessions, resume them in a terminal, and hide single sessions or whole project folders."
 icon = "assets/sessions.svg"

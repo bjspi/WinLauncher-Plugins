@@ -127,10 +127,15 @@ is `None`, which the Telegram plugin turns into a message to update. With
 def actions(self, item: PluginItem) -> tuple[PluginAction, ...]:
 ```
 Further entries for the item's right-click menu, such as AI Sessions' *Open project
-folder*: `PluginAction(label, run, refreshes=False)`. `run(item, context)` runs on a
-worker like a command, may show the same dialogs and returns a message or `None`;
-`refreshes=True` refreshes your list afterwards. `actions` itself is called on the
-GUI thread while the menu opens: look only at `item`, never at files or the network.
+folder*: `PluginAction(label, run, refreshes=False, icon="")`. `run(item, context)`
+runs on a worker like a command, may show the same dialogs and returns a message or
+`None`; `refreshes=True` refreshes your list afterwards. `actions` itself is called
+on the GUI thread while the menu opens: look only at `item`, never at files or the
+network. So look up what an entry needs in `run`, not at refresh: `item.data`
+only carries what is cheap anyway or decides whether an entry appears. `icon`
+names one of WinLauncher's line icons, such as `"folder"`, `"file"` or `"globe"`,
+or gives the full path of an image file; it exists since WinLauncher 0.22.2, so
+ask first (see [Older and newer WinLauncher versions](#older-and-newer-winlauncher-versions)).
 
 ```python
 def tips(self, context: PluginContext) -> tuple[PluginTip, ...]:
@@ -203,6 +208,31 @@ with another plugin's or a website's; the user may rename them.
 - `context.ask` — only available in commands; a background refresh raises
   `SetupRequired` instead.
 
+## Older and newer WinLauncher versions
+
+Your plugin may meet an older WinLauncher than yours, and an older plugin a newer
+one. New parts of the API are optional, so an older plugin keeps working. A newer
+plugin asks what the running WinLauncher offers before using something recent,
+as AI Sessions does for its menu icon:
+
+```python
+from winlauncher.plugins import api
+
+# What the running WinLauncher offers; empty before 0.22.2, which named none.
+HOST_FEATURES = frozenset(getattr(api, "FEATURES", ()))
+
+def menu_entry(label, run, icon):
+    if "action_icons" in HOST_FEATURES:
+        return api.PluginAction(label, run, icon=icon)
+    return api.PluginAction(label, run)
+```
+
+WinLauncher's [plugin guide](https://github.com/bjspi/WinLauncher/blob/main/docs/plugins.md#older-and-newer-winlauncher-versions)
+lists every feature name and the version that brought it. A name from before
+0.22.2 that the plugin needs anyway, such as `Choice`, may simply be imported:
+an older WinLauncher then lists the plugin as not loaded instead of failing later.
+Import a name the plugin can do without inside `try`/`except ImportError`.
+
 ## Rules that matter
 
 **Never break the host.** WinLauncher checks what you declare when it loads your
@@ -274,6 +304,7 @@ reads files an older Windows editor saved as Windows-1252, and honors a
 - [ ] Every network call and subprocess has a timeout; `context.cancel` is honored.
 - [ ] Failures raise `PluginError`/`SetupRequired` with a message a user understands.
 - [ ] Nothing is written outside `context.data_dir`; no secret in `options`.
+- [ ] Anything from a recent WinLauncher is checked in `api.FEATURES` first.
 - [ ] `python -m ruff check plugins tests tools` and `ruff format --check` pass.
 - [ ] Tests cover link building and the conversion of foreign data, and contact no
       server.

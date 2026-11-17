@@ -98,7 +98,7 @@ class DiscoveryTest(SessionTestCase):
 
     def test_routes_icons_manifest_and_host_search(self) -> None:
         self.assertEqual(FOUND.problems, [])
-        self.assertEqual(FOUND.sources[PLUGIN.id].version, "1.1.0")
+        self.assertEqual(FOUND.sources[PLUGIN.id].version, "1.2.0")
         self.assertEqual({route.id for route in PLUGIN.routes}, {p.value for p in domain.Provider})
         icons = {
             application.session_item(
@@ -521,6 +521,10 @@ class ExclusionTest(SessionTestCase):
         with patch.object(application.os, "startfile", create=True) as start:
             self.assertIsNone(action.run(item, self.context))
         start.assert_called_once_with(self.root)
+        self.assertEqual(action.icon, "folder")
+        with patch.object(application, "HOST_FEATURES", frozenset()):  # WinLauncher < 0.22.2.
+            (older,) = PLUGIN.actions(item)
+        self.assertEqual((older.label, older.icon), (action.label, ""))
         moved = replace(item, data={**item.data, "cwd": str(self.root / "gone")})
         with self.assertRaisesRegex(PluginError, "no longer exists"):
             action.run(moved, self.context)
