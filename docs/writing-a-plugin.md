@@ -81,7 +81,7 @@ Everything WinLauncher calls is on your `Plugin` subclass. Only `id`, `label` an
 | `icon` | Image file for items that bring no icon of their own. |
 | `round_icons` | `True` for avatars: images are cropped to circles, and items without one get colored initials. |
 | `options` | `PluginOption` values the user edits in Settings; their type is the type of `default`. |
-| `literal_terms` | Patterns for typed terms that name one of your items, such as `(r"HCP-?\w*",)`. A term one of them describes entirely is matched in one piece instead of loosely. Case is ignored. |
+| `literal_terms` | Patterns for typed terms that name one of your items, such as `(r"TKT-?\w*",)`. A term one of them describes entirely is matched in one piece instead of loosely. Case is ignored. |
 
 ### What you implement
 
@@ -122,6 +122,14 @@ host shows the dialog on the GUI thread while the worker waits. `choose` and `fo
 exist since WinLauncher 0.17; on older versions `getattr(context, "choose", None)`
 is `None`, which the Telegram plugin turns into a message to update. With
 `forgets_items=True` the cached list is dropped afterwards, as *Sign out* needs.
+
+Your buttons come first on the card, in your order, before WinLauncher's *Refresh
+now*. A button without `shown` always shows. With `shown=lambda context: …` it shows
+only while that returns True, such as *Sign in…* while signed out and *Sign out*
+while signed in. It is asked on the GUI thread, so only look at quick things such
+as whether your session file exists. `shown` exists since WinLauncher 0.23.6
+(feature `"command_states"`); check `HOST_FEATURES` first and return the plain
+buttons otherwise, as the Telegram plugin does. Both ways keep working.
 
 ```python
 def actions(self, item: PluginItem) -> tuple[PluginAction, ...]:
@@ -282,11 +290,11 @@ describe one. A term containing a digit always counts as a name, so `12345` find
 ticket 12345 and not 52314. For identifiers without digits, declare their shape:
 
 ```python
-literal_terms = (r"HCP-?\w*",)   # HCP and HCP-1234 are names, not words
+literal_terms = (r"TKT-?\w*",)   # TKT and TKT-1234 are names, not words
 ```
 
 Only the terms a pattern describes entirely are affected; the words of the same
-query keep matching loosely, so `HCP calibratio` still finds a typo'd title.
+query keep matching loosely, so `TKT calibratio` still finds a typo'd title.
 
 **Threads.** `refresh`, `open` and commands run on different worker threads, never
 the GUI thread. A plugin that uses COM calls `pythoncom.CoInitialize()` at the

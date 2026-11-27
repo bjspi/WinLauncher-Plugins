@@ -54,7 +54,7 @@ class DiscoveryTest(unittest.TestCase):
         self.assertEqual(found.problems, [])
         self.assertIn("telegram", [plugin.id for plugin in found.plugins])
         source = found.sources["telegram"]
-        self.assertEqual((source.origin, source.version), ("telegram", "1.1.0"))
+        self.assertEqual((source.origin, source.version), ("telegram", "1.2.0"))
         self.assertEqual(source.folder, PLUGINS / "telegram")
         plugin = next(plugin for plugin in found.plugins if plugin.id == "telegram")
         self.assertEqual((plugin.label, plugin.keyword), ("Telegram", "tg"))
@@ -323,6 +323,31 @@ class ChatFilterTest(unittest.TestCase):
         (self.folder / telegram.EXCLUDED_FILE).write_text("[1, 2]", encoding="utf-8")
         with self.assertRaisesRegex(PluginError, "must map chat keys"):
             telegram.read_excluded(self.folder)
+
+
+class CommandTest(unittest.TestCase):
+    """Sign in shows while signed out and Sign out while signed in, where WinLauncher can."""
+
+    def setUp(self):
+        self.folder = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.context = PluginContext(data_dir=self.folder, options=options())
+
+    def shown(self) -> list[str]:
+        commands = telegram.TelegramPlugin().commands()
+        return [c.label for c in commands if c.shown is None or c.shown(self.context)]
+
+    def test_the_buttons_follow_the_sign_in(self):
+        self.assertEqual(self.shown(), ["Sign in…", "Choose chats…"])
+        telegram._write_credentials(self.folder, (1, "hash"))
+        self.assertEqual(self.shown(), ["Sign in…", "Choose chats…"])  # No session yet.
+        telegram._session_file(self.folder).write_bytes(b"session")
+        self.assertEqual(self.shown(), ["Sign out", "Choose chats…"])
+
+    def test_an_older_winlauncher_gets_every_button_without_shown(self):
+        with patch.object(telegram, "HOST_FEATURES", frozenset()):
+            commands = telegram.TelegramPlugin().commands()
+        self.assertEqual([c.label for c in commands], ["Sign in…", "Choose chats…", "Sign out"])
+        self.assertTrue(all(c.shown is None for c in commands))
 
 
 class SetupTest(unittest.TestCase):

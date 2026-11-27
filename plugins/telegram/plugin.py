@@ -26,6 +26,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from winlauncher import __version__
+from winlauncher.plugins import api
 from winlauncher.plugins.api import (
     Choice,
     Plugin,
@@ -48,6 +49,9 @@ MEMBER_LOOKUPS_PER_REFRESH = 20  # The rest follow in later refreshes; spares fl
 MEMBER_COUNT_MAX_AGE_S = 24 * 60 * 60  # Groups grow and shrink; ask again after a day.
 CONNECT_TIMEOUT_S = 15
 GROUP_KINDS = ("group", "supergroup")  # Basic groups and supergroups: both have members.
+# What the running WinLauncher offers; empty before 0.22.2. "command_states" (0.23.6)
+# shows Sign in or Sign out as it fits; older versions show both buttons always.
+HOST_FEATURES = frozenset(getattr(api, "FEATURES", ()))
 API_HELP = (
     "Create an app at https://my.telegram.org under API development tools; "
     "it shows an api_id and an api_hash."
@@ -172,10 +176,16 @@ class TelegramPlugin(Plugin):
         return _run(self._list(context, credentials))
 
     def commands(self) -> tuple[PluginCommand, ...]:
+        if "command_states" not in HOST_FEATURES:
+            return (
+                PluginCommand("Sign in…", self._sign_in),
+                PluginCommand("Choose chats…", choose_chats),
+                PluginCommand("Sign out", self._sign_out, forgets_items=True),
+            )
         return (
-            PluginCommand("Sign in…", self._sign_in),
-            PluginCommand("Choose chats…", choose_chats),
-            PluginCommand("Sign out", self._sign_out, forgets_items=True),
+            PluginCommand("Sign in…", self._sign_in, shown=lambda context: not signed_in(context)),
+            PluginCommand("Sign out", self._sign_out, forgets_items=True, shown=signed_in),
+            PluginCommand("Choose chats…", choose_chats),  # Also brings back left-out chats.
         )
 
     def exclude(self, item: PluginItem, context: PluginContext) -> bool:
@@ -592,6 +602,17 @@ def _client(folder: Path, credentials: tuple[int, str]):
 def _run(coroutine):
     """Run Telethon on a fresh event loop of the calling worker thread."""
     return asyncio.run(coroutine)
+
+
+def signed_in(context: PluginContext) -> bool:
+    """Whether a sign-in is stored; quick, so the settings card may ask it any time.
+
+    Telegram may still have ended the session: the next refresh then asks to sign in
+    again, and Sign out clears what is left.
+    """
+    return (
+        _session_file(context.data_dir).exists() and _read_credentials(context.data_dir) is not None
+    )
 
 
 def _session_file(folder: Path) -> Path:
